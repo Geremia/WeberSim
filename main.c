@@ -89,7 +89,8 @@ double vecNormSqrd(vec *v) {
 void printPhysicsStats(obj *objects, int numObjects, FILE *outFile) {
 	int i;
 	vec CoMpos = {0}, CoMvel = {0}, CoMacc = {0}; //center of mass pos., vel., & acc. vectors
-	double totalVel = 0, totalAcc = 0,
+	double avgD = 0, avgDstd = 0, rmsD = 0, rmsDstd = 0, //distance-from-origin stats
+	       totalVel = 0, totalAcc = 0,
 	       avgVel = 0, avgVelStd = 0, rmsVel = 0, rmsVelStd = 0,
 	       avgAcc = 0, avgAccStd = 0, rmsAcc = 0, rmsAccStd = 0;
 	//compute CoMs
@@ -116,34 +117,50 @@ void printPhysicsStats(obj *objects, int numObjects, FILE *outFile) {
 		CoMacc.y /= (double)numObjects;
 		CoMacc.z /= (double)numObjects;
 	}
-	//compute total vel & acc:
+	//compute total pos (distance-from-origin), vel, & acc:
 	for (i = 0; i < numObjects; i++) {
+		avgD += vecNorm(&objects[i].pos);
 		totalVel += vecNorm(&objects[i].vel);
 		totalAcc += vecNorm(&objects[i].acc);
 	}
 	//compute average vel & acc:
+	avgD /= (double)numObjects;
 	avgVel = totalVel / (double)numObjects;
 	avgAcc = totalAcc / (double)numObjects;
-	//compute averages' standard dev.s:
+	//compute RMSs:
 	for (i = 0; i < numObjects; i++) {
+		rmsD += vecNormSqrd(&objects[i].pos);
+		rmsD = sqrt(rmsD/(double)numObjects);
 		rmsVel += vecNormSqrd(&objects[i].vel);
-		rmsVel = sqrt(rmsVel);
+		rmsVel = sqrt(rmsVel/(double)numObjects);
 		rmsAcc += vecNormSqrd(&objects[i].acc);
-		rmsAcc = sqrt(rmsAcc);
+		rmsAcc = sqrt(rmsAcc/(double)numObjects);
 	}
-	//compute RMSs' standard dev.s:
+	//compute standard dev.s:
 	for (i = 0; i < numObjects; i++) {
+		//for means
+		avgDstd += pow(vecNormSqrd(&objects[i].pos) - rmsD, 2.0);
+		avgDstd = sqrt(rmsDstd/(double)numObjects);
+		avgVelStd += pow(vecNormSqrd(&objects[i].vel) - rmsVel, 2.0);
+		avgVelStd = sqrt(rmsVelStd/(double)numObjects);
+		avgAccStd += pow(vecNormSqrd(&objects[i].acc) - rmsAcc, 2.0);
+		avgAccStd = sqrt(rmsAccStd/(double)numObjects);
+		//for RMSs
+		rmsDstd += pow(vecNormSqrd(&objects[i].pos) - rmsD, 2.0);
+		rmsDstd = sqrt(rmsDstd/(double)numObjects);
 		rmsVelStd += pow(vecNormSqrd(&objects[i].vel) - rmsVel, 2.0);
-		rmsVelStd = sqrt(rmsVelStd);
+		rmsVelStd = sqrt(rmsVelStd/(double)numObjects);
 		rmsAccStd += pow(vecNormSqrd(&objects[i].acc) - rmsAcc, 2.0);
-		rmsAccStd = sqrt(rmsAccStd);
+		rmsAccStd = sqrt(rmsAccStd/(double)numObjects);
 	}
 	fprintf(outFile, "# Center of Mass:\n#\t pos.: (% e, % e, % e)\n#\t vel.: (% e, % e, % e)\n#\t acc.: (% e, % e, % e)\n"
+			 "# Distance-from-origin:\n#\tmean: %e ± %e\n#\t RMS: %e ± %e\n"
 			 "# Speed:\n#\ttotal: %e\n#\t mean: %e ± %e\n#\t  RMS: %e ± %e\n"
 			 "# Acceleration:\n#\ttotal: %e\n#\t mean: %e ± %e\n#\t  RMS: %e ± %e\n",
 			 CoMpos.x, CoMpos.y, CoMpos.z,
 			 CoMvel.x, CoMvel.y, CoMvel.z,
 			 CoMacc.x, CoMacc.y, CoMacc.z,
+			 avgD, avgDstd, rmsD, rmsDstd,
 			 totalVel, avgVel, avgVelStd, rmsVel, rmsVelStd,
 			 totalAcc, avgAcc, avgAccStd, rmsAcc, rmsAccStd);
 }
@@ -196,12 +213,14 @@ void integrate(obj *objects, int numObjects, double dt) {
 	int i, j;
 	double r = 0, r3 = 0, dr_dt = 0, dr_dt_sqrd, d2r_dt2 = 0;
 	obj *a, *b;
+	obj *objectsOld = malloc(sizeof(obj)*numObjects);
+	objectsOld = memcpy(objectsOld, objects, sizeof(obj)*numObjects); //backup old one
 	for (i = 0; i < numObjects; i++) {
 		//compute force on object i due to all objects ≠ i
 		for (j = 0; j < numObjects; j++) { // 2 for loops → O(n²)
-			a = objects + i;
+			a = objects + i; //"a" is the object we're updating, so take it from "objects"
 			if (j != i) { //exclude self-interactions
-				b = objects + j;
+				b = objectsOld + j; //"b" is the "source" object, which we're not updating, so take it from "objectsOld"
 				r = distance(&a->pos, &b->pos);
 					r3 = r*r*r;
 				//units: c = e = e' = 1
@@ -229,6 +248,7 @@ void integrate(obj *objects, int numObjects, double dt) {
 			}
 		}
 	}
+	free(objectsOld);
 }
 
 void simulate(double t_0, double t_f, double dt, obj *objects, int numObjects) {
@@ -275,8 +295,8 @@ int main(int argc, char *argv[]) {
         			break;
         		case 'v':
         			velMag = atof(argv[++i]);
-				if (velMag <= 0) {
-					printf("(v = %f) ≯ 0\n", velMag);
+				if (velMag < 0) {
+					printf("(v = %f) must be ≥ 0.\n", velMag);
 					return 1;
 				}
         			break;
@@ -323,5 +343,6 @@ usage:
 	}
 	obj *objects = generate(n, radius, velMag);
 	simulate(t_0, t_f, dt, objects, n);
+	free(objects);
 	return 0;
 }
