@@ -34,10 +34,10 @@ vec randVec(double L)
     return vec;
 }
 
-//Generate a unit vector in x-y plane tangent to point (x,y).
+//Generate a vector of magnitude magnitude in x-y plane tangent to point (x,y).
 //analagous to a flat rotation curve,
 //as the magnitude of the vector doesn't depend on the distance (x, y) is from (0,0)
-vec tangentUnitVec(double x, double y)
+vec tangentVec(double x, double y, double magnitude)
 {
     vec v = { .z = 0 };
     double theta = atan((y<0?-y:y)/(x<0?-x:x));
@@ -58,21 +58,21 @@ vec tangentUnitVec(double x, double y)
 	    y = -sin(theta);
 	}
     }
-    v.x = x;
-    v.y = y;
+    v.x = x*magnitude;
+    v.y = y*magnitude;
     return v;
 }
 
 //Generate a random distribution of numObjects objects in sphere of radius rad.
-//They will have 1 unit of rotational velocity ∥ to z axis.
-obj* generate(int numObjects, double rad)
+//They will have velMag worth of rotational velocity ∥ to z axis.
+obj* generate(int numObjects, double rad, double velMag)
 {
     obj *objects = calloc(numObjects, sizeof(obj));
-
     for (int i = 0; i < numObjects; i++) {
 	objects[i].pos = randVec(rad);
-	objects[i].vel = tangentUnitVec(objects[i].pos.x,
-					objects[i].pos.y);
+	objects[i].vel = tangentVec(objects[i].pos.x,
+		       		    objects[i].pos.y,
+				    velMag);
     }
     return objects;
 }
@@ -236,7 +236,7 @@ void simulate(double t_0, double t_f, double dt, obj *objects, int numObjects) {
 	int stepNumber = 0;
 	//output initial condition:
 	writeDataFile(objects, numObjects, stepNumber++, 0.);
-	for (t = t_0+dt; t <= t_f; t += dt) {
+	for (t = t_0+dt; t < t_f; t += dt) {
 		//integrate 
 		integrate(objects, numObjects, dt);	
 		//write data file
@@ -246,13 +246,14 @@ void simulate(double t_0, double t_f, double dt, obj *objects, int numObjects) {
 
 int main() {
 	int n = 128; //number of objects
-	double radius = 128; //radius of "Plummer" sphere
+	double radius = 128, //radius of "Plummer" sphere
+	       velMag = 16; //magnitude of initial velocity for each object
 
     	srandom(time(NULL)); //Seed the RNG with the time.
 
-	obj *objects = generate(n, radius);
+	obj *objects = generate(n, radius, velMag);
 
-	double t_0 = 0, t_f = 8, dt = 1;
+	double t_0 = 0, t_f = 8, dt = 0.2;
 	simulate(t_0, t_f, dt, objects, n);
 
 	return 0;
