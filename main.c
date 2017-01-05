@@ -18,7 +18,6 @@ typedef struct {
 typedef struct {
     vec pos, vel, acc;
     //mass assumed = 1
-    //speed of light c also assumed = 1, for simplicity's sake
 } obj;
 
 //Generate a vector in a random direction, of random length ≤ L
@@ -205,6 +204,7 @@ void integrate(obj *objects, int numObjects, double dt) {
 				b = objects + j;
 				r = distance(&a->pos, &b->pos);
 					r3 = r*r*r;
+				//units: c = e = e' = 1
 				dr_dt = ((a->pos.x - b->pos.x)*(a->vel.x - b->vel.x)+
 					 (a->pos.y - b->pos.y)*(a->vel.y - b->vel.y)+
 					 (a->pos.z - b->pos.z)*(a->vel.z - b->vel.z))/r;
@@ -244,17 +244,84 @@ void simulate(double t_0, double t_f, double dt, obj *objects, int numObjects) {
 	}
 }
 
-int main() {
-	int n = 128; //number of objects
-	double radius = 128, //radius of "Plummer" sphere
-	       velMag = 16; //magnitude of initial velocity for each object
-
+int main(int argc, char *argv[]) {
+	int n = 0; //number of objects
+	double radius = 0, //radius of "Plummer" sphere
+	       velMag = 0; //magnitude of initial velocity for each object
+	double t_0 = 0, t_f = 0, dt = 0;
     	srandom(time(NULL)); //Seed the RNG with the time.
-
+	for (int i = 1; i < argc; i++) {
+		if (strcmp(&argv[i][1], "h")==0)
+			goto usage;
+		if (argc != 13) {
+			printf("Wrong number of arguments\n");
+			goto usage;
+		}
+        	if (argv[i][0] == '-') {
+        		switch (argv[i][1]) {
+        		case 'n':
+        			n = atoi(argv[++i]);
+				if (n <= 0) {
+					printf("(n = %d) ≯ 0\n", n);
+					return 1;
+				}
+        			break;
+        		case 'r':
+        			radius = atof(argv[++i]);
+				if (radius <= 0) {
+					printf("(r = %f) ≯ 0\n", radius);
+					return 1;
+				}
+        			break;
+        		case 'v':
+        			velMag = atof(argv[++i]);
+				if (velMag <= 0) {
+					printf("(v = %f) ≯ 0\n", velMag);
+					return 1;
+				}
+        			break;
+        		case 'i':
+        			t_0 = atof(argv[++i]);
+				if (t_0 < 0) {
+					printf("(t_0 = %f) must be > 0.\n", t_0);
+					return 1;
+				}
+        			break;
+        		case 'f':
+        			t_f = atof(argv[++i]);
+				if (t_f <= 0) {
+					printf("(f = %f) ≯ 0\n", t_f);
+					return 1;
+				}
+				if (t_f <= t_0) {
+					printf("(f = %f) ≮ (i = %f)\n", t_0, t_f);
+					return 1;
+				}
+        			break;
+        		case 'd':
+        			dt = atof(argv[++i]);
+				if (dt <= 0) {
+					printf("(d = %f) ≯ 0\n", dt);
+					return 1;
+				}
+        			break;
+			case 'h':
+usage:
+				printf("Usage:\n"
+				       "\t-n: number of objects\n"
+				       "\t-r: radius of \"Plummer\" sphere\n"
+				       "\t-v: initial velocity for each object\n"
+				       "\t\tThe initial velocity is in the x-y plane.\n"
+				       "\t-i: initial time\n"
+				       "\t-f: final time\n"
+				       "\t-d: time step\n"
+				       "Units are defined in terms of c = 1 and e = e' = 1.\n"
+				       "\t-h: this help message\n");
+				return 0;
+			}
+		}
+	}
 	obj *objects = generate(n, radius, velMag);
-
-	double t_0 = 0, t_f = 8, dt = 0.2;
 	simulate(t_0, t_f, dt, objects, n);
-
 	return 0;
 }
