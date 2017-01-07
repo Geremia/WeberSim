@@ -233,7 +233,7 @@ void integrate(obj *objects, int numObjects, double dt) {
 					   (a->vel.z - b->vel.z)*(a->vel.z - b->vel.z) + (a->pos.z - b->pos.z)*(a->acc.z - b->acc.z)
 					   - dr_dt_sqrd)/r;
 				//update acceleration
-				//use Weber's force law here:
+				//use Weber's force law here:                  V---- Negative sign here should make the force attractive
 				a->acc.x = ((1 - 0.5*dr_dt_sqrd + r*d2r_dt2) * (b->pos.x - a->pos.x))/r3;
 				a->acc.y = ((1 - 0.5*dr_dt_sqrd + r*d2r_dt2) * (b->pos.y - a->pos.y))/r3;
 				a->acc.z = ((1 - 0.5*dr_dt_sqrd + r*d2r_dt2) * (b->pos.z - a->pos.z))/r3;
