@@ -7,6 +7,8 @@
 #include <string.h>		//for memset
 #include <time.h>		//for seeding the RNG with the current time
 
+#include <omp.h>		//for multithreading
+
 //random number in range [-1, 1] and (0, 1], respectively
 #define rand11() (2.0*((double)random())/((double)(RAND_MAX))-1.0)
 #define rand01() (((double)random())/((double)(RAND_MAX)))
@@ -67,6 +69,7 @@ vec tangentVec(double x, double y, double magnitude)
 obj* generate(int numObjects, double rad, double velMag)
 {
     obj *objects = calloc(numObjects, sizeof(obj));
+#pragma omp parallel for
     for (int i = 0; i < numObjects; i++) {
 	objects[i].pos = randVec(rad);
 	objects[i].vel = tangentVec(objects[i].pos.x,
@@ -94,6 +97,7 @@ void printPhysicsStats(obj *objects, int numObjects, FILE *outFile) {
 	       avgVel = 0, avgVelStd = 0, rmsVel = 0, rmsVelStd = 0,
 	       avgAcc = 0, avgAccStd = 0, rmsAcc = 0, rmsAccStd = 0;
 	//compute CoMs
+#pragma omp parallel for
 	for (i = 0; i < numObjects; i++) {
 		//position
 		CoMpos.x += objects[i].pos.x;
@@ -118,6 +122,7 @@ void printPhysicsStats(obj *objects, int numObjects, FILE *outFile) {
 		CoMacc.z /= (double)numObjects;
 	}
 	//compute total pos (distance-from-origin), vel, & acc:
+#pragma omp parallel for
 	for (i = 0; i < numObjects; i++) {
 		avgD += vecNorm(&objects[i].pos);
 		totalVel += vecNorm(&objects[i].vel);
@@ -128,6 +133,7 @@ void printPhysicsStats(obj *objects, int numObjects, FILE *outFile) {
 	avgVel = totalVel / (double)numObjects;
 	avgAcc = totalAcc / (double)numObjects;
 	//compute RMSs:
+#pragma omp parallel for
 	for (i = 0; i < numObjects; i++) {
 		rmsD += vecNormSqrd(&objects[i].pos);
 		rmsD = sqrt(rmsD/(double)numObjects);
@@ -137,6 +143,7 @@ void printPhysicsStats(obj *objects, int numObjects, FILE *outFile) {
 		rmsAcc = sqrt(rmsAcc/(double)numObjects);
 	}
 	//compute standard dev.s:
+#pragma omp parallel for
 	for (i = 0; i < numObjects; i++) {
 		//for means
 		avgDstd += pow(vecNormSqrd(&objects[i].pos) - rmsD, 2.0);
@@ -215,8 +222,10 @@ void integrate(obj *objects, int numObjects, double dt) {
 	obj *a, *b;
 	obj *objectsOld = malloc(sizeof(obj)*numObjects);
 	objectsOld = memcpy(objectsOld, objects, sizeof(obj)*numObjects); //backup old one
+#pragma omp parallel for
 	for (i = 0; i < numObjects; i++) {
 		//compute force on object i due to all objects ≠ i
+#pragma omp parallel for
 		for (j = 0; j < numObjects; j++) { // 2 for loops → O(n²)
 			a = objects + i; //"a" is the object we're updating, so take it from "objects"
 			if (j != i) { //exclude self-interactions
@@ -252,15 +261,16 @@ void integrate(obj *objects, int numObjects, double dt) {
 }
 
 void simulate(double t_0, double t_f, double dt, obj *objects, int numObjects) {
-	double t; //current simulation time
-	int stepNumber = 0;
+	double t = t_0; //current time
+	int stepNumber = 0, totalSteps = (int)((t_f - t_0)/dt);
 	//output initial condition:
-	writeDataFile(objects, numObjects, stepNumber++, 0.);
-	for (t = t_0+dt; t < t_f; t += dt) {
-		//integrate 
-		integrate(objects, numObjects, dt);	
+	writeDataFile(objects, numObjects, stepNumber++, t);
+#pragma omp parallel for
+	for (stepNumber = 1; stepNumber < totalSteps; stepNumber++) {
+		//integrate
+		integrate(objects, numObjects, dt);
 		//write data file
-		writeDataFile(objects, numObjects, stepNumber++, t);
+		writeDataFile(objects, numObjects, stepNumber++, t += dt);
 	}
 }
 
@@ -269,6 +279,7 @@ int main(int argc, char *argv[]) {
 	double radius = 0, //radius of "Plummer" sphere
 	       velMag = 0; //magnitude of initial velocity for each object
 	double t_0 = 0, t_f = 0, dt = 0;
+	omp_set_num_threads(omp_get_num_procs()); //# threads == # CPUs
     	srandom(time(NULL)); //Seed the RNG with the time.
 	for (int i = 1; i < argc; i++) {
 		if (strcmp(&argv[i][1], "h")==0)
