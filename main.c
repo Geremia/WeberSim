@@ -77,12 +77,12 @@ obj* generate(int numObjects, double rad, double velMag)
 }
 
 //Compute the norm (magnitude) of a vector.
-double vecNorm(vec *v) {
+inline double vecNorm(vec *v) {
 	return sqrt(v->x * v->x + v->y * v->y + v->z * v->z);
 }
 
 //Compute the norm².
-double vecNormSqrd(vec *v) {
+inline double vecNormSqrd(vec *v) {
 	return v->x * v->x + v->y * v->y + v->z * v->z;
 }
 
@@ -203,7 +203,7 @@ void writeDataFile(obj *objects, int numObjects, int stepNumber, double t) {
 }
 
 //find the Euclidean/Pythagorean distance r between two points represented by pos. vectors
-double distance(vec *a, vec *b) {
+inline double distance(vec *a, vec *b) {
 	return sqrt((a->x - b->x)*(a->x - b->x)+
 		    (a->y - b->y)*(a->y - b->y)+
 		    (a->z - b->z)*(a->z - b->z));
