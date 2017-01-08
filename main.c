@@ -23,7 +23,7 @@ typedef struct {
 } obj;
 
 //Generate a vector in a random direction, of random length ≤ L
-vec randVec(double L)
+inline vec randVec(double L)
 {
     double x = L, y = L, z = L;
     while (sqrt(x * x + y * y + z * z) > L) {
@@ -38,7 +38,7 @@ vec randVec(double L)
 //Generate a vector of magnitude magnitude in x-y plane tangent to point (x,y).
 //analagous to a flat rotation curve,
 //as the magnitude of the vector doesn't depend on the distance (x, y) is from (0,0)
-vec tangentVec(double x, double y, double magnitude)
+inline vec tangentVec(double x, double y, double magnitude)
 {
     vec v = { .z = 0 };
     double theta = atan((y<0?-y:y)/(x<0?-x:x));
@@ -266,11 +266,11 @@ void simulate(double t_0, double t_f, double dt, obj *objects, int numObjects) {
 	//output initial condition:
 	writeDataFile(objects, numObjects, stepNumber++, t);
 #pragma omp parallel for
-	for (stepNumber = 1; stepNumber < totalSteps; stepNumber++) {
+	for (stepNumber = 1; stepNumber <= totalSteps; stepNumber++) {
 		//integrate
 		integrate(objects, numObjects, dt);
 		//write data file
-		writeDataFile(objects, numObjects, stepNumber++, t += dt);
+		writeDataFile(objects, numObjects, stepNumber, t += dt);
 	}
 }
 
