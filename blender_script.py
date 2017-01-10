@@ -73,7 +73,6 @@ for j in range(1, frames):
         bpy.data.shape_keys[0].key_blocks[keyname].keyframe_insert("value", frame = framecount)
         for i in range(0,len(bm.verts)-1):
             try:
-                bpy.ops.object.mode_set(mode = 'OBJECT')
                 bm.verts[i].co.x = data[rowcount][1]
                 bm.verts[i].co.y = data[rowcount][2]
                 bm.verts[i].co.z = data[rowcount][3]
