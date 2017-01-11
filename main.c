@@ -222,7 +222,7 @@ inline double distance(vec *a, vec *b) {
 		    (a->z - b->z)*(a->z - b->z));
 }
 
-void integrate(obj *objects, int numObjects, double dt) {
+void integrateWeber(obj *objects, int numObjects, double dt) {
 	int i, j;
 	double r = 0, r3 = 0, dr_dt = 0, dr_dt_sqrd, d2r_dt2 = 0;
 	obj *a, *b;
@@ -265,7 +265,42 @@ void integrate(obj *objects, int numObjects, double dt) {
 	free(objectsOld);
 }
 
-void simulate(double t_0, double t_f, double dt, obj *objects, int numObjects) {
+void integrateNewton(obj *objects, int numObjects, double dt) {
+	int i, j;
+	double r = 0, r3 = 0;
+	obj *a, *b;
+	obj *objectsOld = malloc(sizeof(obj)*numObjects);
+	objectsOld = memcpy(objectsOld, objects, sizeof(obj)*numObjects); //backup old one
+	//compute force on object i due to all objects ≠ i
+#pragma omp parallel for
+	for (i = 0; i < numObjects; i++) {
+		a = objects + i; //"a" is the object we're updating, so take it from "objects"
+		for (j = 0; j < numObjects; j++) { // 2 for loops → O(n²)
+			if (j != i) { //exclude self-interactions
+				b = objectsOld + j; //"b" is the "source" object, which we're not updating, so take it from "objectsOld"
+				r = distance(&a->pos, &b->pos);
+					r3 = r*r*r;
+				//units: c = e = e' = 1
+				//update acceleration
+				//use Newton's force law here:
+				a->acc.x = (b->pos.x - a->pos.x)/r3;
+				a->acc.y = (b->pos.y - a->pos.y)/r3;
+				a->acc.z = (b->pos.z - a->pos.z)/r3;
+				//update position using current velocity and next time step's acceleration
+				a->pos.x += 0.5*a->acc.x*dt*dt + a->vel.x*dt;
+				a->pos.y += 0.5*a->acc.y*dt*dt + a->vel.y*dt;
+				a->pos.z += 0.5*a->acc.z*dt*dt + a->vel.z*dt;
+				//update velocity using next time step's acceleration
+				a->vel.x += a->acc.x * dt;
+				a->vel.y += a->acc.y * dt;
+				a->vel.z += a->acc.z * dt;
+			}
+		}
+	}
+	free(objectsOld);
+}
+
+void simulate(double t_0, double t_f, double dt, obj *objects, int numObjects, void (*integrate)(obj*, int, double)) {
 	double t = t_0; //current time
 	int stepNumber = 0, totalSteps = (int)((t_f - t_0)/dt);
 	//output initial condition:
@@ -283,13 +318,14 @@ int main(int argc, char *argv[]) {
 	double radius = 0, //radius of "Plummer" sphere
 	       velMag = 0; //magnitude of initial velocity for each object
 	double t_0 = 0, t_f = 0, dt = 0;
+	_Bool weber = 1; // ≠1 → Newton's force law 
 	omp_set_num_threads(omp_get_num_procs()); //# threads == # CPUs
     	srandom(time(NULL)); //Seed the RNG with the time.
 	for (int i = 1; i < argc; i++) {
 		if (strcmp(&argv[i][1], "h")==0)
 			goto usage;
-		if (argc != 13) {
-			printf("Wrong number of arguments\n");
+		if (!(argc >= 13 && argc <= 16)) {
+			fprintf(stderr, "Wrong number of arguments\n");
 			goto usage;
 		}
         	if (argv[i][0] == '-') {
@@ -297,49 +333,56 @@ int main(int argc, char *argv[]) {
         		case 'n':
         			n = atoi(argv[++i]);
 				if (n <= 0) {
-					printf("(n = %d) ≯ 0\n", n);
+					fprintf(stderr, "(n = %d) ≯ 0\n", n);
 					return 1;
 				}
         			break;
         		case 'r':
         			radius = atof(argv[++i]);
 				if (radius <= 0) {
-					printf("(r = %f) ≯ 0\n", radius);
+					fprintf(stderr, "(r = %f) ≯ 0\n", radius);
 					return 1;
 				}
         			break;
         		case 'v':
         			velMag = atof(argv[++i]);
 				if (velMag < 0) {
-					printf("(v = %f) must be ≥ 0.\n", velMag);
+					fprintf(stderr, "(v = %f) must be ≥ 0.\n", velMag);
 					return 1;
 				}
         			break;
         		case 'i':
         			t_0 = atof(argv[++i]);
 				if (t_0 < 0) {
-					printf("(t_0 = %f) must be > 0.\n", t_0);
+					fprintf(stderr, "(t_0 = %f) must be > 0.\n", t_0);
 					return 1;
 				}
         			break;
         		case 'f':
         			t_f = atof(argv[++i]);
 				if (t_f <= 0) {
-					printf("(f = %f) ≯ 0\n", t_f);
+					fprintf(stderr, "(f = %f) ≯ 0\n", t_f);
 					return 1;
 				}
 				if (t_f <= t_0) {
-					printf("(f = %f) ≮ (i = %f)\n", t_0, t_f);
+					fprintf(stderr, "(f = %f) ≮ (i = %f)\n", t_0, t_f);
 					return 1;
 				}
         			break;
         		case 'd':
         			dt = atof(argv[++i]);
 				if (dt <= 0) {
-					printf("(d = %f) ≯ 0\n", dt);
+					fprintf(stderr, "(d = %f) ≯ 0\n", dt);
 					return 1;
 				}
         			break;
+			case 'w':
+				weber = atoi(argv[++i]);
+				if (!(weber == 0 || weber == 1)) {
+					fprintf(stderr, "(w = %d) ≠ (0 or 1)\n", weber);
+					return 1;
+				}
+				break;
 			case 'h':
 usage:
 				printf("Usage:\n"
@@ -351,13 +394,25 @@ usage:
 				       "\t-f: final time\n"
 				       "\t-d: time step\n"
 				       "Units are defined in terms of c = 1 and e = e' = 1.\n"
+				       "Optional:\n\t-w: 0 = Newton's force (default: 1 = Weber's)\n"
 				       "\t-h: this help message\n");
 				return 0;
 			}
 		}
 	}
+	printf("Generating random distribution of"
+	       "\n\t%e objects each with"
+	       "\n\tvelocity %e"
+	       "\n\tin sphere of radius %e…\n",
+	       (double)n, velMag, radius);
 	obj *objects = generate(n, radius, velMag);
-	simulate(t_0, t_f, dt, objects, n);
+	void (*integrationFunction)(obj*, int, double) = (weber==1)?integrateWeber:integrateNewton;
+	printf("Integrating %s's force law using %d OpenMP procs…"
+	       "\n\tt = %e → %e\n\tΔt = %e\n",
+	       (weber==1)?"Weber":"Newton", omp_get_num_procs(),
+	       t_0, t_f, dt);
+	simulate(t_0, t_f, dt, objects, n, integrationFunction);
+	printf("%e files written.\n", (double)((int)((t_f - t_0)/dt)));
 	free(objects);
 	return 0;
 }
