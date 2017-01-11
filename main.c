@@ -97,7 +97,6 @@ void printPhysicsStats(obj *objects, int numObjects, FILE *outFile) {
 	       avgVel = 0, avgVelStd = 0, rmsVel = 0, rmsVelStd = 0,
 	       avgAcc = 0, avgAccStd = 0, rmsAcc = 0, rmsAccStd = 0;
 	//compute CoMs
-#pragma omp parallel for
 	for (i = 0; i < numObjects; i++) {
 		//position
 		CoMpos.x += objects[i].pos.x;
@@ -122,7 +121,6 @@ void printPhysicsStats(obj *objects, int numObjects, FILE *outFile) {
 		CoMacc.z /= (double)numObjects;
 	}
 	//compute total pos (distance-from-origin), vel, & acc:
-#pragma omp parallel for
 	for (i = 0; i < numObjects; i++) {
 		avgD += vecNorm(&objects[i].pos);
 		totalVel += vecNorm(&objects[i].vel);
@@ -133,7 +131,6 @@ void printPhysicsStats(obj *objects, int numObjects, FILE *outFile) {
 	avgVel = totalVel / (double)numObjects;
 	avgAcc = totalAcc / (double)numObjects;
 	//compute RMSs:
-#pragma omp parallel for
 	for (i = 0; i < numObjects; i++) {
 		rmsD += vecNormSqrd(&objects[i].pos);
 		rmsD = sqrt(rmsD/(double)numObjects);
@@ -143,7 +140,6 @@ void printPhysicsStats(obj *objects, int numObjects, FILE *outFile) {
 		rmsAcc = sqrt(rmsAcc/(double)numObjects);
 	}
 	//compute standard dev.s:
-#pragma omp parallel for
 	for (i = 0; i < numObjects; i++) {
 		//for means
 		avgDstd += pow(vecNormSqrd(&objects[i].pos) - rmsD, 2.0);
@@ -223,12 +219,11 @@ void integrate(obj *objects, int numObjects, double dt) {
 	obj *objectsOld = malloc(sizeof(obj)*numObjects);
 	objectsOld = memcpy(objectsOld, objects, sizeof(obj)*numObjects); //backup old one
 	//compute force on object i due to all objects ≠ i
-#pragma omp parallel for
+#pragma omp parallel for collapse(2)
 	for (i = 0; i < numObjects; i++) {
-#pragma omp parallel for
 		for (j = 0; j < numObjects; j++) { // 2 for loops → O(n²)
+			a = objects + i; //"a" is the object we're updating, so take it from "objects"
 			if (j != i) { //exclude self-interactions
-				a = objects + i; //"a" is the object we're updating, so take it from "objects"
 				b = objectsOld + j; //"b" is the "source" object, which we're not updating, so take it from "objectsOld"
 				r = distance(&a->pos, &b->pos);
 					r3 = r*r*r;
@@ -265,7 +260,6 @@ void simulate(double t_0, double t_f, double dt, obj *objects, int numObjects) {
 	int stepNumber = 0, totalSteps = (int)((t_f - t_0)/dt);
 	//output initial condition:
 	writeDataFile(objects, numObjects, stepNumber++, t);
-#pragma omp parallel for
 	for (stepNumber = 1; stepNumber <= totalSteps; stepNumber++) {
 		//integrate
 		integrate(objects, numObjects, dt);
