@@ -219,10 +219,9 @@ void integrate(obj *objects, int numObjects, double dt) {
 	obj *objectsOld = malloc(sizeof(obj)*numObjects);
 	objectsOld = memcpy(objectsOld, objects, sizeof(obj)*numObjects); //backup old one
 	//compute force on object i due to all objects ≠ i
-#pragma omp parallel for collapse(2)
 	for (i = 0; i < numObjects; i++) {
+		a = objects + i; //"a" is the object we're updating, so take it from "objects"
 		for (j = 0; j < numObjects; j++) { // 2 for loops → O(n²)
-			a = objects + i; //"a" is the object we're updating, so take it from "objects"
 			if (j != i) { //exclude self-interactions
 				b = objectsOld + j; //"b" is the "source" object, which we're not updating, so take it from "objectsOld"
 				r = distance(&a->pos, &b->pos);
