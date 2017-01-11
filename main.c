@@ -229,6 +229,7 @@ void integrate(obj *objects, int numObjects, double dt) {
 	obj *objectsOld = malloc(sizeof(obj)*numObjects);
 	objectsOld = memcpy(objectsOld, objects, sizeof(obj)*numObjects); //backup old one
 	//compute force on object i due to all objects ≠ i
+#pragma omp parallel for
 	for (i = 0; i < numObjects; i++) {
 		a = objects + i; //"a" is the object we're updating, so take it from "objects"
 		for (j = 0; j < numObjects; j++) { // 2 for loops → O(n²)
