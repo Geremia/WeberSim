@@ -95,32 +95,39 @@ void printPhysicsStats(obj *objects, int numObjects, FILE *outFile) {
 	double avgD = 0, avgDstd = 0, rmsD = 0, rmsDstd = 0, //distance-from-origin stats
 	       totalVel = 0, totalAcc = 0,
 	       avgVel = 0, avgVelStd = 0, rmsVel = 0, rmsVelStd = 0,
-	       avgAcc = 0, avgAccStd = 0, rmsAcc = 0, rmsAccStd = 0;
+	       avgAcc = 0, avgAccStd = 0, rmsAcc = 0, rmsAccStd = 0,
+	       CoMposx = 0, CoMposy = 0, CoMposz = 0,
+	       CoMvelx = 0, CoMvely = 0, CoMvelz = 0,
+	       CoMaccx = 0, CoMaccy = 0, CoMaccz = 0;
 	//compute CoMs
+#pragma omp parallel for reduction(+:CoMposx,CoMposy,CoMposz, \
+				     CoMvelx,CoMvely,CoMvelz, \
+				     CoMaccx,CoMaccy,CoMaccz)
 	for (i = 0; i < numObjects; i++) {
 		//position
-		CoMpos.x += objects[i].pos.x;
-		CoMpos.y += objects[i].pos.y;
-		CoMpos.z += objects[i].pos.z;
-		CoMpos.x /= (double)numObjects;
-		CoMpos.y /= (double)numObjects;
-		CoMpos.z /= (double)numObjects;
+		CoMposx += objects[i].pos.x;
+		CoMposy += objects[i].pos.y;
+		CoMposz += objects[i].pos.z;
 		//velocity
-		CoMvel.x += objects[i].vel.x;
-		CoMvel.y += objects[i].vel.y;
-		CoMvel.z += objects[i].vel.z;
-		CoMvel.x /= (double)numObjects;
-		CoMvel.y /= (double)numObjects;
-		CoMvel.z /= (double)numObjects;
+		CoMvelx += objects[i].vel.x;
+		CoMvely += objects[i].vel.y;
+		CoMvelz += objects[i].vel.z;
 		//acceleration
-		CoMacc.x += objects[i].acc.x;
-		CoMacc.y += objects[i].acc.y;
-		CoMacc.z += objects[i].acc.z;
-		CoMacc.x /= (double)numObjects;
-		CoMacc.y /= (double)numObjects;
-		CoMacc.z /= (double)numObjects;
+		CoMaccx += objects[i].acc.x;
+		CoMaccy += objects[i].acc.y;
+		CoMaccz += objects[i].acc.z;
 	}
+	CoMpos.x = (CoMposx /= (double)numObjects);
+	CoMpos.y = (CoMposy /= (double)numObjects);
+	CoMpos.z = (CoMposz /= (double)numObjects);
+	CoMvel.x = (CoMvelx /= (double)numObjects);
+	CoMvel.y = (CoMvely /= (double)numObjects);
+	CoMvel.z = (CoMvelz /= (double)numObjects);
+	CoMacc.x = (CoMaccx /= (double)numObjects);
+	CoMacc.y = (CoMaccy /= (double)numObjects);
+	CoMacc.z = (CoMaccz /= (double)numObjects);
 	//compute total pos (distance-from-origin), vel, & acc:
+#pragma omp parallel for reduction(+:avgD,totalVel,totalAcc)
 	for (i = 0; i < numObjects; i++) {
 		avgD += vecNorm(&objects[i].pos);
 		totalVel += vecNorm(&objects[i].vel);
@@ -131,31 +138,34 @@ void printPhysicsStats(obj *objects, int numObjects, FILE *outFile) {
 	avgVel = totalVel / (double)numObjects;
 	avgAcc = totalAcc / (double)numObjects;
 	//compute RMSs:
+#pragma omp parallel for reduction(+:rmsD,rmsVel,rmsAcc)
 	for (i = 0; i < numObjects; i++) {
 		rmsD += vecNormSqrd(&objects[i].pos);
-		rmsD = sqrt(rmsD/(double)numObjects);
 		rmsVel += vecNormSqrd(&objects[i].vel);
-		rmsVel = sqrt(rmsVel/(double)numObjects);
 		rmsAcc += vecNormSqrd(&objects[i].acc);
-		rmsAcc = sqrt(rmsAcc/(double)numObjects);
 	}
+	rmsD = sqrt(rmsD/(double)numObjects);
+	rmsVel = sqrt(rmsVel/(double)numObjects);
+	rmsAcc = sqrt(rmsAcc/(double)numObjects);
 	//compute standard dev.s:
+#pragma omp parallel for reduction(+:avgDstd,avgVelStd,avgAccStd, \
+				     rmsDstd,rmsVelStd,rmsAccStd)
 	for (i = 0; i < numObjects; i++) {
 		//for means
 		avgDstd += pow(vecNormSqrd(&objects[i].pos) - rmsD, 2.0);
-		avgDstd = sqrt(rmsDstd/(double)numObjects);
 		avgVelStd += pow(vecNormSqrd(&objects[i].vel) - rmsVel, 2.0);
-		avgVelStd = sqrt(rmsVelStd/(double)numObjects);
 		avgAccStd += pow(vecNormSqrd(&objects[i].acc) - rmsAcc, 2.0);
-		avgAccStd = sqrt(rmsAccStd/(double)numObjects);
 		//for RMSs
 		rmsDstd += pow(vecNormSqrd(&objects[i].pos) - rmsD, 2.0);
-		rmsDstd = sqrt(rmsDstd/(double)numObjects);
 		rmsVelStd += pow(vecNormSqrd(&objects[i].vel) - rmsVel, 2.0);
-		rmsVelStd = sqrt(rmsVelStd/(double)numObjects);
 		rmsAccStd += pow(vecNormSqrd(&objects[i].acc) - rmsAcc, 2.0);
-		rmsAccStd = sqrt(rmsAccStd/(double)numObjects);
 	}
+	avgDstd = sqrt(rmsDstd/(double)numObjects);
+	avgVelStd = sqrt(rmsVelStd/(double)numObjects);
+	avgAccStd = sqrt(rmsAccStd/(double)numObjects);
+	rmsDstd = sqrt(rmsDstd/(double)numObjects);
+	rmsVelStd = sqrt(rmsVelStd/(double)numObjects);
+	rmsAccStd = sqrt(rmsAccStd/(double)numObjects);
 	fprintf(outFile, "# Center of Mass:\n#\t pos.: (% e, % e, % e)\n#\t vel.: (% e, % e, % e)\n#\t acc.: (% e, % e, % e)\n"
 			 "# Distance-from-origin:\n#\tmean: %e ± %e\n#\t RMS: %e ± %e\n"
 			 "# Speed:\n#\ttotal: %e\n#\t mean: %e ± %e\n#\t  RMS: %e ± %e\n"
