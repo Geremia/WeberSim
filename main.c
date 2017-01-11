@@ -100,9 +100,6 @@ void printPhysicsStats(obj *objects, int numObjects, FILE *outFile) {
 	       CoMvelx = 0, CoMvely = 0, CoMvelz = 0,
 	       CoMaccx = 0, CoMaccy = 0, CoMaccz = 0;
 	//compute CoMs
-#pragma omp parallel for reduction(+:CoMposx,CoMposy,CoMposz, \
-				     CoMvelx,CoMvely,CoMvelz, \
-				     CoMaccx,CoMaccy,CoMaccz)
 	for (i = 0; i < numObjects; i++) {
 		//position
 		CoMposx += objects[i].pos.x;
@@ -127,7 +124,6 @@ void printPhysicsStats(obj *objects, int numObjects, FILE *outFile) {
 	CoMacc.y = (CoMaccy /= (double)numObjects);
 	CoMacc.z = (CoMaccz /= (double)numObjects);
 	//compute total pos (distance-from-origin), vel, & acc:
-#pragma omp parallel for reduction(+:avgD,totalVel,totalAcc)
 	for (i = 0; i < numObjects; i++) {
 		avgD += vecNorm(&objects[i].pos);
 		totalVel += vecNorm(&objects[i].vel);
@@ -138,7 +134,6 @@ void printPhysicsStats(obj *objects, int numObjects, FILE *outFile) {
 	avgVel = totalVel / (double)numObjects;
 	avgAcc = totalAcc / (double)numObjects;
 	//compute RMSs:
-#pragma omp parallel for reduction(+:rmsD,rmsVel,rmsAcc)
 	for (i = 0; i < numObjects; i++) {
 		rmsD += vecNormSqrd(&objects[i].pos);
 		rmsVel += vecNormSqrd(&objects[i].vel);
@@ -148,8 +143,6 @@ void printPhysicsStats(obj *objects, int numObjects, FILE *outFile) {
 	rmsVel = sqrt(rmsVel/(double)numObjects);
 	rmsAcc = sqrt(rmsAcc/(double)numObjects);
 	//compute standard dev.s:
-#pragma omp parallel for reduction(+:avgDstd,avgVelStd,avgAccStd, \
-				     rmsDstd,rmsVelStd,rmsAccStd)
 	for (i = 0; i < numObjects; i++) {
 		//for means
 		avgDstd += pow(vecNormSqrd(&objects[i].pos) - rmsD, 2.0);
