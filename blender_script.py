@@ -23,7 +23,6 @@ def fileNameToData(filepath):
 n = len(fileNameToData("000000.txt")) 
 
 #Read in all data files.
-#(ibid. pp. 8-6 – 8-7)
 files = glob.glob('*.txt')
 files.sort()
 data = [] #data is of the format ((frame 1 verts: (2,3,3), (3,6,2), …), (frame 2 verts: (0,5,2), (3,3,5), …), …)
@@ -33,9 +32,19 @@ for f in files:
 n_frames = len(files)
 bpy.context.scene.frame_end = n_frames
 
-#add mesh object:
+#delete any/all initial mesh objects
+bpy.ops.object.select_by_type(type = 'MESH')
+bpy.ops.object.delete(use_global=False)
+
+#add mesh object with correct number (n) of vertices:
 bpy.ops.mesh.primitive_circle_add(vertices=n)
 obj = bpy.context.active_object
+
+#give it halo material
+mesh = obj.data
+mat = bpy.data.materials.new("Halo")
+mesh.materials.append(mat)
+bpy.data.materials["Halo"].type = 'HALO'
 
 for i_frame in range(n_frames):
     block = obj.shape_key_add(name=str(i_frame), from_mix=False)  # returns a key_blocks member
