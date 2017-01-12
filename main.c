@@ -2,6 +2,7 @@
 //AMDG
 
 #include <stdio.h>
+#include <unistd.h>		//for access()
 #include <stdlib.h>		//for the random function, which returns a long int in the range [0, RAND_MAX]
 #include <math.h>		//for trig functions
 #include <string.h>		//for memset
@@ -89,7 +90,7 @@ inline double vecNormSqrd(vec *v) {
 	return v->x * v->x + v->y * v->y + v->z * v->z;
 }
 
-void printPhysicsStats(obj *objects, int numObjects, FILE *outFile) {
+void printPhysicsStats(obj *objects, int numObjects, FILE *outFile, double t /*= current time step*/) {
 	int i;
 	vec CoMpos = {0}, CoMvel = {0}, CoMacc = {0}; //center of mass pos., vel., & acc. vectors
 	double avgD = 0, avgDstd = 0, rmsD = 0, rmsDstd = 0, //distance-from-origin stats
@@ -159,10 +160,14 @@ void printPhysicsStats(obj *objects, int numObjects, FILE *outFile) {
 	rmsDstd = sqrt(rmsDstd/(double)numObjects);
 	rmsVelStd = sqrt(rmsVelStd/(double)numObjects);
 	rmsAccStd = sqrt(rmsAccStd/(double)numObjects);
-	fprintf(outFile, "# Center of Mass:\n#\t pos.: (% e, % e, % e)\n#\t vel.: (% e, % e, % e)\n#\t acc.: (% e, % e, % e)\n"
-			 "# Distance-from-origin:\n#\tmean: %e ± %e\n#\t RMS: %e ± %e\n"
-			 "# Speed:\n#\ttotal: %e\n#\t mean: %e ± %e\n#\t  RMS: %e ± %e\n"
-			 "# Acceleration:\n#\ttotal: %e\n#\t mean: %e ± %e\n#\t  RMS: %e ± %e\n",
+	fprintf(outFile, "% e "
+			 "% e % e % e "
+			 "% e % e % e "
+			 "% e % e % e "
+			 "% e % e % e % e "
+			 "% e % e % e % e %e "
+			 "% e % e % e % e %e\n",
+			 t,
 			 CoMpos.x, CoMpos.y, CoMpos.z,
 			 CoMvel.x, CoMvel.y, CoMvel.z,
 			 CoMacc.x, CoMacc.y, CoMacc.z,
@@ -176,7 +181,6 @@ void printOut(obj *objects, int numObjects, FILE *outFile, double t) {
 	//print timestep
 	fprintf(outFile, "# t = %f\n", t);
 	//print physics stats (total KE, RMS vel./acc., etc.) for time-snapshot
-	printPhysicsStats(objects, numObjects, outFile);
 	//print header
 	fprintf(outFile, "%6s  %13s %13s %13s  %13s %13s %13s  %13s %13s %13s\n",
 			 "#   ID",
@@ -197,15 +201,56 @@ void printOut(obj *objects, int numObjects, FILE *outFile, double t) {
 }
 
 void writeDataFile(obj *objects, int numObjects, int stepNumber, double t) {
-	FILE *f;
+	FILE *f, *s; //frame (f) and stats (s) files
 	char str[10];
+	//Output "frame" file
 	sprintf(str, "%06d.txt", stepNumber);
-	if ((f = fopen(str, "w"))) {
+	if ((f = fopen(str, "w")))
 		printOut(objects, numObjects, f, t);
-		fclose(f);
-	} else
-		fprintf(stderr, "Could not open file %s for writing\n"
-				"Perhaps there is no space left on the device.", str);
+	else
+		goto error;
+	//Append to stats file
+	sprintf(str, "stats.txt");
+	if(access(str, F_OK)==0) { //stats.txt exists.
+		if (!(s = fopen(str, "a"))) //a = append
+			goto error;
+	} else { //stats.txt doesn't exist; prepend header first
+		if ((s = fopen(str, "a"))) //a = append
+			//header:
+			fprintf(s, //column headers:
+				   "%13s "
+				   "%13s %13s %13s "
+				   "%13s %13s %13s "
+				   "%13s %13s %13s "
+				   "%13s %13s %13s %13s "
+				   "%13s %13s %13s %13s %13s "
+				   "%13s %13s %13s %13s %13s\n"
+				   //column numbers:
+				   "#%12d "
+				   "%13d %13d %13d "
+				   "%13d %13d %13d "
+				   "%13d %13d %13d "
+				   "%13d %13d %13d %13d "
+				   "%13d %13d %13d %13d %13d "
+				   "%13d %13d %13d %13d %13d\n",
+				   "#           t",
+				   "CoM_x", "CoM_y", "CoM_z",
+				   "CoM_vel_x", "CoM_vel_y", "CoM_vel_z",
+				   "CoM_acc_x", "CoM_acc_y", "CoM_acc_z",
+				   "σ dist", "Δ(σdist)",  "RMS_dist", "Δ(RMS_dist)",
+				   "total_vel", "σ vel", "Δ(σ vel)", "RMS_vel", "Δ(RMS_vel)",
+				   "total_acc", "σ acc", "Δ(σ acc)", "RMS_acc", "Δ(RMS_acc)",
+				   1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24);
+		else
+			goto error;
+	}
+	printPhysicsStats(objects, numObjects, s, t);
+	fclose(f);
+	fclose(s);
+	return;
+error:
+	fprintf(stderr, "Could not open file %s for writing\n"
+		"Perhaps there is no space left on the device.", str);
 }
 
 //find the Euclidean/Pythagorean distance r between two points represented by pos. vectors

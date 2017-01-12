@@ -12,8 +12,8 @@ os.chdir("/home/alan/Documents/Weber n-body sim/")
 def fileNameToData(filepath):
      #import first data file:
      file = open(filepath,'r')
-     lines = file.readlines()[17:] #read 18th lines onward (used Python slice)
-                                                #(ignore data files header info)
+     lines = file.readlines()[2:] #read 3rd line & onwards (used Python slice)
+                                                #(ignore non-header line)
      data=[]
      for i in lines:
          data.append(list(map(float,i.split()[1:4])))
@@ -23,7 +23,7 @@ def fileNameToData(filepath):
 n = len(fileNameToData("000000.txt")) 
 
 #Read in all data files.
-files = glob.glob('*.txt')
+files = glob.glob('[0-9]*.txt')
 files.sort()
 data = [] #data is of the format ((frame 1 verts: (2,3,3), (3,6,2), …), (frame 2 verts: (0,5,2), (3,3,5), …), …)
 for f in files:
