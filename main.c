@@ -36,13 +36,19 @@ inline vec randVec(double L)
     return vec;
 }
 
-//Generate a vector of magnitude magnitude in x-y plane tangent to point (x,y).
+//Compute the norm (magnitude) of a vector.
+inline double vecNorm(vec *v) {
+	return sqrt(v->x * v->x + v->y * v->y + v->z * v->z);
+}
+
+//Generate a vector, of magnitude ∝ r from z-axis, in x-y plane tangent to point (x,y).
 //analagous to a flat rotation curve,
 //as the magnitude of the vector doesn't depend on the distance (x, y) is from (0,0)
-inline vec tangentVec(double x, double y, double magnitude)
+inline vec tangentVec(double x, double y, double magnitude, double radius)
 {
     vec v = { .z = 0 };
-    double theta = atan((y<0?-y:y)/(x<0?-x:x));
+    double theta = atan((y<0?-y:y)/(x<0?-x:x)),
+	   r = sqrt(x*x+y*y);
     if (x > 0) {
 	if (y > 0) { //1st quad.
 	    x = -cos(theta);
@@ -60,8 +66,8 @@ inline vec tangentVec(double x, double y, double magnitude)
 	    y = -sin(theta);
 	}
     }
-    v.x = x*magnitude;
-    v.y = y*magnitude;
+    v.x = x*magnitude*r/radius;
+    v.y = y*magnitude*r/radius;
     return v;
 }
 
@@ -75,14 +81,9 @@ obj* generate(int numObjects, double rad, double velMag)
 	objects[i].pos = randVec(rad);
 	objects[i].vel = tangentVec(objects[i].pos.x,
 		       		    objects[i].pos.y,
-				    velMag);
+				    velMag, rad);
     }
     return objects;
-}
-
-//Compute the norm (magnitude) of a vector.
-inline double vecNorm(vec *v) {
-	return sqrt(v->x * v->x + v->y * v->y + v->z * v->z);
 }
 
 //Compute the norm².
