@@ -108,6 +108,14 @@ inline void crossProdPlusEqual(vec *result, vec *a, vec *b) {
 	result->z += a->x * b->z - a->z * b->x;
 }
 
+inline vec crossProd(vec *a, vec *b) {
+	vec result;
+	result.x = a->y * b->z - a->z * b->y;
+	result.y = a->z * b->x - a->x * b->z;
+	result.z = a->x * b->z - a->z * b->x;
+	return result;
+}
+
 void printPhysicsStats(obj *objects, int numObjects, FILE *outFile, double t /*= current time step*/) {
 	int i;
 	vec CoMpos = {0}, CoMvel = {0}, CoMacc = {0}, //center of mass pos., vel., & acc. vectors
@@ -116,67 +124,68 @@ void printPhysicsStats(obj *objects, int numObjects, FILE *outFile, double t /*=
 	       totalVel = 0, totalAcc = 0,
 	       avgVel = 0, avgVelStd = 0, rmsVel = 0, rmsVelStd = 0,
 	       avgAcc = 0, avgAccStd = 0, rmsAcc = 0, rmsAccStd = 0;
-	//compute CoMs
-#pragma omp parallel for reduction(+:CoMposx,CoMposy,CoMposz, \
-				     CoMvelx,CoMvely,CoMvelz, \
-				     CoMaccx,CoMaccy,CoMaccz)
-	for (i = 0; i < numObjects; i++) {
-		//position
-		vecPlusEqual(&CoMpos, &objects[i].pos);
-		//velocity
-		vecPlusEqual(&CoMvel, &objects[i].vel);
-		//acceleration
-		vecPlusEqual(&CoMacc, &objects[i].acc);
+#pragma omp parallel
+	{ //compute CoMs
+		for (i = 0; i < numObjects; i++) {
+			//position
+			vecPlusEqual(&CoMpos, &objects[i].pos);
+			//velocity
+			vecPlusEqual(&CoMvel, &objects[i].vel);
+			//acceleration
+			vecPlusEqual(&CoMacc, &objects[i].acc);
+		}
+		vecDivEqual(&CoMpos, numObjects);
+		vecDivEqual(&CoMvel, numObjects);
+		vecDivEqual(&CoMacc, numObjects);
 	}
-	vecDivEqual(&CoMpos, numObjects);
-	vecDivEqual(&CoMvel, numObjects);
-	vecDivEqual(&CoMacc, numObjects);
-	//compute total pos (distance-from-origin), vel, & acc:
-#pragma omp parallel for reduction(+:avgD,totalVel,totalAcc)
-	for (i = 0; i < numObjects; i++) {
-		avgD += vecNorm(&objects[i].pos);
-		totalVel += vecNorm(&objects[i].vel);
-		totalAcc += vecNorm(&objects[i].acc);
+#pragma omp parallel
+	{ //compute total pos (distance-from-origin), vel, & acc:
+		for (i = 0; i < numObjects; i++) {
+			avgD += vecNorm(&objects[i].pos);
+			totalVel += vecNorm(&objects[i].vel);
+			totalAcc += vecNorm(&objects[i].acc);
+		}
+		//compute average vel & acc:
+		avgD /= (double)numObjects;
+		avgVel = totalVel / (double)numObjects;
+		avgAcc = totalAcc / (double)numObjects;
 	}
-	//compute average vel & acc:
-	avgD /= (double)numObjects;
-	avgVel = totalVel / (double)numObjects;
-	avgAcc = totalAcc / (double)numObjects;
-	//compute RMSs:
-#pragma omp parallel for reduction(+:rmsD,rmsVel,rmsAcc)
-	for (i = 0; i < numObjects; i++) {
-		rmsD += vecNormSqrd(&objects[i].pos);
-		rmsVel += vecNormSqrd(&objects[i].vel);
-		rmsAcc += vecNormSqrd(&objects[i].acc);
+#pragma omp parallel
+	{ //compute RMSs:
+		for (i = 0; i < numObjects; i++) {
+			rmsD += vecNormSqrd(&objects[i].pos);
+			rmsVel += vecNormSqrd(&objects[i].vel);
+			rmsAcc += vecNormSqrd(&objects[i].acc);
+		}
+		rmsD = sqrt(rmsD/(double)numObjects);
+		rmsVel = sqrt(rmsVel/(double)numObjects);
+		rmsAcc = sqrt(rmsAcc/(double)numObjects);
+		//compute standard dev.s:
+		for (i = 0; i < numObjects; i++) {
+			//for means
+			avgDstd += pow(vecNormSqrd(&objects[i].pos) - rmsD, 2.0);
+			avgVelStd += pow(vecNormSqrd(&objects[i].vel) - rmsVel, 2.0);
+			avgAccStd += pow(vecNormSqrd(&objects[i].acc) - rmsAcc, 2.0);
+			//for RMSs
+			rmsDstd += pow(vecNormSqrd(&objects[i].pos) - rmsD, 2.0);
+			rmsVelStd += pow(vecNormSqrd(&objects[i].vel) - rmsVel, 2.0);
+			rmsAccStd += pow(vecNormSqrd(&objects[i].acc) - rmsAcc, 2.0);
+		}
+		avgDstd = sqrt(rmsDstd/(double)numObjects);
+		avgVelStd = sqrt(rmsVelStd/(double)numObjects);
+		avgAccStd = sqrt(rmsAccStd/(double)numObjects);
+		rmsDstd = sqrt(rmsDstd/(double)numObjects);
+		rmsVelStd = sqrt(rmsVelStd/(double)numObjects);
+		rmsAccStd = sqrt(rmsAccStd/(double)numObjects);
 	}
-	rmsD = sqrt(rmsD/(double)numObjects);
-	rmsVel = sqrt(rmsVel/(double)numObjects);
-	rmsAcc = sqrt(rmsAcc/(double)numObjects);
-	//compute standard dev.s:
-#pragma omp parallel for reduction(+:avgDstd,avgVelStd,avgAccStd, \
-				     rmsDstd,rmsVelStd,rmsAccStd)
-	for (i = 0; i < numObjects; i++) {
-		//for means
-		avgDstd += pow(vecNormSqrd(&objects[i].pos) - rmsD, 2.0);
-		avgVelStd += pow(vecNormSqrd(&objects[i].vel) - rmsVel, 2.0);
-		avgAccStd += pow(vecNormSqrd(&objects[i].acc) - rmsAcc, 2.0);
-		//for RMSs
-		rmsDstd += pow(vecNormSqrd(&objects[i].pos) - rmsD, 2.0);
-		rmsVelStd += pow(vecNormSqrd(&objects[i].vel) - rmsVel, 2.0);
-		rmsAccStd += pow(vecNormSqrd(&objects[i].acc) - rmsAcc, 2.0);
-	}
-	avgDstd = sqrt(rmsDstd/(double)numObjects);
-	avgVelStd = sqrt(rmsVelStd/(double)numObjects);
-	avgAccStd = sqrt(rmsAccStd/(double)numObjects);
-	rmsDstd = sqrt(rmsDstd/(double)numObjects);
-	rmsVelStd = sqrt(rmsVelStd/(double)numObjects);
-	rmsAccStd = sqrt(rmsAccStd/(double)numObjects);
-	//compute angular mo. and torque
-	for (i = 0; i < numObjects; i++) {
-		crossProdPlusEqual(&angularMo, &objects[i].pos, &objects[i].vel); // angular mo. = r × v
-		crossProdPlusEqual(&torque, &objects[i].pos, &objects[i].acc); // torque = r × a
-		vecDivEqual(&angularMo, numObjects);
-		vecDivEqual(&torque, numObjects);
+#pragma omp parallel
+	{ //compute angular mo. and torque
+		for (i = 0; i < numObjects; i++) {
+			crossProdPlusEqual(&angularMo, &objects[i].pos, &objects[i].vel); // angular mo. = r × v
+			crossProdPlusEqual(&torque, &objects[i].pos, &objects[i].acc); // torque = r × a
+			vecDivEqual(&angularMo, numObjects);
+			vecDivEqual(&torque, numObjects);
+		}
 	}
 	fprintf(outFile, "% e "
 			 "% e % e % e "
@@ -199,26 +208,46 @@ void printPhysicsStats(obj *objects, int numObjects, FILE *outFile, double t /*=
 }
 
 void printOut(obj *objects, int numObjects, FILE *outFile, double t) {
-	vec pos, vel, acc;
+	vec pos, vel, acc, angmo, torque;
 	//print timestep
 	fprintf(outFile, "# t = %f\n", t);
 	//print physics stats (total KE, RMS vel./acc., etc.) for time-snapshot
 	//print header
-	fprintf(outFile, "%6s  %13s %13s %13s  %13s %13s %13s  %13s %13s %13s\n",
+	fprintf(outFile, "%6s "
+			 "%13s %13s %13s %13s "
+			 "%13s %13s %13s %13s "
+			 "%13s %13s %13s %13s "
+			 "%13s %13s\n"
+			 "#%5d "
+			 "%13d %13d %13d %13d "
+			 "%13d %13d %13d %13d "
+			 "%13d %13d %13d %13d "
+			 "%13d %13d\n",
 			 "#   ID",
-			 "x", "y", "z",
-			 "vel_x", "vel_y", "vel_z",
-			 "acc_x", "acc_y", "acc_z");
+			 "x", "y", "z", "dist",
+			 "vel_x", "vel_y", "vel_z", "|vel|",
+			 "acc_x", "acc_y", "acc_z", "|acc|",
+			 "ang_mo", "torque",
+			 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15);
 	//print object data
 	for (int i = 0; i < numObjects; i++) {
 		pos = objects[i].pos;
 		vel = objects[i].vel;
 		acc = objects[i].acc;
-		fprintf(outFile, "%6d  % e % e % e  % e % e % e  % e % e % e\n",
+		angmo = crossProd(&pos, &vel), // =r×v
+		torque = crossProd(&pos, &acc); // =r×a
+		fprintf(outFile,
+				"%6d "
+			 	"% e % e % e % e "
+			 	"% e % e % e % e "
+			 	"% e % e % e % e "
+			 	"% e % e\n",
 				i, //id of object
-				pos.x, pos.y, pos.z,
-				vel.x, vel.y, vel.z,
-				acc.x, acc.y, acc.z);
+				pos.x, pos.y, pos.z, vecNorm(&pos),
+				vel.x, vel.y, vel.z, vecNorm(&vel),
+				acc.x, acc.y, acc.z, vecNorm(&acc),
+				vecNorm(&angmo), // =|r×v|
+				vecNorm(&torque)); // =|r×a|
 	}
 }
 
