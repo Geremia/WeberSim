@@ -4,4 +4,4 @@ all:
 debug:
 	cc -g -pg -Ofast -fopenmp -std=c11 -pedantic -Wall -lm -D_XOPEN_SOURCE=600 -o WeberSim main.c
 clean:
-	rm !(*.c||*.h||Makefile||*.blend||.git||.||..||*.py||WeberSim)
+	rm !(*.c||*.h||Makefile||*.blend||.git||.||..||*.py||WeberSim||*.m)

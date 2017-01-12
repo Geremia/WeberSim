@@ -492,8 +492,9 @@ usage:
 				printf("Usage:\n"
 				       "\t-n: number of objects\n"
 				       "\t-r: radius of \"Plummer\" sphere\n"
-				       "\t-v: initial velocity for each object\n"
-				       "\t\tThe initial velocity is in the x-y plane.\n"
+				       "\t-v: initial velocity for object on equator\n"
+				       "\t\tThe initial velocity is in the x-y plane and ⟂ r.\n"
+				       "\t\tIt is ∝ (dist. from z-axis)×(value given).\n"
 				       "\t-i: initial time\n"
 				       "\t-f: final time\n"
 				       "\t-d: time step\n"
@@ -506,7 +507,7 @@ usage:
 	}
 	printf("Generating random distribution of"
 	       "\n\t%e objects each with"
-	       "\n\tvelocity %e"
+	       "\n\tvelocity %e ∝ (dist. from z-axis)"
 	       "\n\tin sphere of radius %e…\n",
 	       (double)n, velMag, radius);
 	obj *objects = generate(n, radius, velMag);
