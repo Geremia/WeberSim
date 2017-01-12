@@ -90,40 +90,44 @@ inline double vecNormSqrd(vec *v) {
 	return v->x * v->x + v->y * v->y + v->z * v->z;
 }
 
+inline void vecPlusEqual(vec *result, vec *addend) {
+	result->x += addend->x;
+	result->y += addend->y;
+	result->z += addend->z;
+}
+
+inline void vecDivEqual(vec *result, double divend) {
+	result->x /= divend;
+	result->y /= divend;
+	result->z /= divend;
+}
+
+inline void crossProdPlusEqual(vec *result, vec *a, vec *b) {
+	result->x += a->y * b->z - a->z * b->y;
+	result->y += a->z * b->x - a->x * b->z;
+	result->z += a->x * b->z - a->z * b->x;
+}
+
 void printPhysicsStats(obj *objects, int numObjects, FILE *outFile, double t /*= current time step*/) {
 	int i;
-	vec CoMpos = {0}, CoMvel = {0}, CoMacc = {0}; //center of mass pos., vel., & acc. vectors
+	vec CoMpos = {0}, CoMvel = {0}, CoMacc = {0}, //center of mass pos., vel., & acc. vectors
+	    angularMo = {0}, torque = {0}; //angular momentum (r×v) and torque (r×a)
 	double avgD = 0, avgDstd = 0, rmsD = 0, rmsDstd = 0, //distance-from-origin stats
 	       totalVel = 0, totalAcc = 0,
 	       avgVel = 0, avgVelStd = 0, rmsVel = 0, rmsVelStd = 0,
-	       avgAcc = 0, avgAccStd = 0, rmsAcc = 0, rmsAccStd = 0,
-	       CoMposx = 0, CoMposy = 0, CoMposz = 0,
-	       CoMvelx = 0, CoMvely = 0, CoMvelz = 0,
-	       CoMaccx = 0, CoMaccy = 0, CoMaccz = 0;
+	       avgAcc = 0, avgAccStd = 0, rmsAcc = 0, rmsAccStd = 0;
 	//compute CoMs
 	for (i = 0; i < numObjects; i++) {
 		//position
-		CoMposx += objects[i].pos.x;
-		CoMposy += objects[i].pos.y;
-		CoMposz += objects[i].pos.z;
+		vecPlusEqual(&CoMpos, &objects[i].pos);
 		//velocity
-		CoMvelx += objects[i].vel.x;
-		CoMvely += objects[i].vel.y;
-		CoMvelz += objects[i].vel.z;
+		vecPlusEqual(&CoMvel, &objects[i].vel);
 		//acceleration
-		CoMaccx += objects[i].acc.x;
-		CoMaccy += objects[i].acc.y;
-		CoMaccz += objects[i].acc.z;
+		vecPlusEqual(&CoMacc, &objects[i].acc);
 	}
-	CoMpos.x = (CoMposx /= (double)numObjects);
-	CoMpos.y = (CoMposy /= (double)numObjects);
-	CoMpos.z = (CoMposz /= (double)numObjects);
-	CoMvel.x = (CoMvelx /= (double)numObjects);
-	CoMvel.y = (CoMvely /= (double)numObjects);
-	CoMvel.z = (CoMvelz /= (double)numObjects);
-	CoMacc.x = (CoMaccx /= (double)numObjects);
-	CoMacc.y = (CoMaccy /= (double)numObjects);
-	CoMacc.z = (CoMaccz /= (double)numObjects);
+	vecDivEqual(&CoMpos, numObjects);
+	vecDivEqual(&CoMvel, numObjects);
+	vecDivEqual(&CoMacc, numObjects);
 	//compute total pos (distance-from-origin), vel, & acc:
 	for (i = 0; i < numObjects; i++) {
 		avgD += vecNorm(&objects[i].pos);
@@ -160,17 +164,28 @@ void printPhysicsStats(obj *objects, int numObjects, FILE *outFile, double t /*=
 	rmsDstd = sqrt(rmsDstd/(double)numObjects);
 	rmsVelStd = sqrt(rmsVelStd/(double)numObjects);
 	rmsAccStd = sqrt(rmsAccStd/(double)numObjects);
+	//compute angular mo. and torque
+	for (i = 0; i < numObjects; i++) {
+		crossProdPlusEqual(&angularMo, &objects[i].pos, &objects[i].vel); // angular mo. = r × v
+		crossProdPlusEqual(&torque, &objects[i].pos, &objects[i].acc); // torque = r × a
+		vecDivEqual(&angularMo, numObjects);
+		vecDivEqual(&torque, numObjects);
+	}
 	fprintf(outFile, "% e "
 			 "% e % e % e "
 			 "% e % e % e "
 			 "% e % e % e "
+			 "% e % e % e "
+			 "% e % e % e "
 			 "% e % e % e % e "
-			 "% e % e % e % e %e "
-			 "% e % e % e % e %e\n",
+			 "% e % e % e % e % e "
+			 "% e % e % e % e % e\n",
 			 t,
 			 CoMpos.x, CoMpos.y, CoMpos.z,
 			 CoMvel.x, CoMvel.y, CoMvel.z,
 			 CoMacc.x, CoMacc.y, CoMacc.z,
+			 angularMo.x, angularMo.y, angularMo.z,
+			 torque.x, torque.y, torque.z,
 			 avgD, avgDstd, rmsD, rmsDstd,
 			 totalVel, avgVel, avgVelStd, rmsVel, rmsVelStd,
 			 totalAcc, avgAcc, avgAccStd, rmsAcc, rmsAccStd);
@@ -222,6 +237,8 @@ void writeDataFile(obj *objects, int numObjects, int stepNumber, double t) {
 				   "%13s %13s %13s "
 				   "%13s %13s %13s "
 				   "%13s %13s %13s "
+				   "%13s %13s %13s "
+				   "%13s %13s %13s "
 				   "%13s %13s %13s %13s "
 				   "%13s %13s %13s %13s %13s "
 				   "%13s %13s %13s %13s %13s\n"
@@ -230,17 +247,29 @@ void writeDataFile(obj *objects, int numObjects, int stepNumber, double t) {
 				   "%13d %13d %13d "
 				   "%13d %13d %13d "
 				   "%13d %13d %13d "
+				   "%13d %13d %13d "
+				   "%13d %13d %13d "
 				   "%13d %13d %13d %13d "
 				   "%13d %13d %13d %13d %13d "
 				   "%13d %13d %13d %13d %13d\n",
 				   "#           t",
-				   "CoM_x", "CoM_y", "CoM_z",
-				   "CoM_vel_x", "CoM_vel_y", "CoM_vel_z",
-				   "CoM_acc_x", "CoM_acc_y", "CoM_acc_z",
-				   "σ dist", "Δ(σdist)",  "RMS_dist", "Δ(RMS_dist)",
-				   "total_vel", "σ vel", "Δ(σ vel)", "RMS_vel", "Δ(RMS_vel)",
-				   "total_acc", "σ acc", "Δ(σ acc)", "RMS_acc", "Δ(RMS_acc)",
-				   1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24);
+				   "CoM x", "CoM y", "CoM z",
+				   "CoM vel x", "CoM vel y", "CoM vel z",
+				   "CoM acc x", "CoM acc y", "CoM acc z",
+				   "ang. mo. x", "ang. mo. y", "ang. mo. z",
+				   "torque x", "torque y", "torque z",
+				   "mean dist", "+/-",  "RMS dist", "+/-",
+				   "total vel", "mean vel", "+/-", "RMS vel", "+/-",
+				   "total acc", "mean  acc", "+/-", "RMS acc", "+/-",
+				   1,
+				   2,3,4,
+				   5,6,7,
+				   8,9,10,
+				   11,12,13,
+				   14,15,16,
+				   17,18,19,20,
+				   21,22,23,24,25,
+				   26,27,28,29,30);
 		else
 			goto error;
 	}
@@ -358,7 +387,7 @@ int main(int argc, char *argv[]) {
 	double t_0 = 0, t_f = 0, dt = 0;
 	_Bool weber = 1; // ≠1 → Newton's force law 
 	omp_set_num_threads(omp_get_num_procs()); //# threads == # CPUs
-    	srandom(time(NULL)); //Seed the RNG with the time.
+    	srandom(999); //Seed the RNG with time
 	for (int i = 1; i < argc; i++) {
 		if (strcmp(&argv[i][1], "h")==0)
 			goto usage;
