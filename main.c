@@ -336,6 +336,10 @@ void integrateWeber(obj *objects, int numObjects, double dt) {
 #pragma omp parallel for
 	for (i = 0; i < numObjects; i++) {
 		a = objects + i; //"a" is the object we're updating, so take it from "objects"
+		//rezero acceleration because acceleration is only for current time step 
+		a->acc.x = 0;
+		a->acc.y = 0;
+		a->acc.z = 0;
 		for (j = 0; j < numObjects; j++) { // 2 for loops → O(n²)
 			if (j != i) { //exclude self-interactions
 				b = objectsOld + j; //"b" is the "source" object, which we're not updating, so take it from "objectsOld"
@@ -351,10 +355,10 @@ void integrateWeber(obj *objects, int numObjects, double dt) {
 					   (a->vel.z - b->vel.z)*(a->vel.z - b->vel.z) + (a->pos.z - b->pos.z)*(a->acc.z - b->acc.z)
 					   - dr_dt_sqrd)/r;
 				//update acceleration
-				//use Weber's force law here:                  V---- Negative sign here should make the force attractive
-				a->acc.x = ((1 - 0.5*dr_dt_sqrd + r*d2r_dt2) * (b->pos.x - a->pos.x))/r3;
-				a->acc.y = ((1 - 0.5*dr_dt_sqrd + r*d2r_dt2) * (b->pos.y - a->pos.y))/r3;
-				a->acc.z = ((1 - 0.5*dr_dt_sqrd + r*d2r_dt2) * (b->pos.z - a->pos.z))/r3;
+				//use Weber's force law here:                   V---- Negative sign here should make the force attractive
+				a->acc.x += ((1 - 0.5*dr_dt_sqrd + r*d2r_dt2) * (b->pos.x - a->pos.x))/r3;
+				a->acc.y += ((1 - 0.5*dr_dt_sqrd + r*d2r_dt2) * (b->pos.y - a->pos.y))/r3;
+				a->acc.z += ((1 - 0.5*dr_dt_sqrd + r*d2r_dt2) * (b->pos.z - a->pos.z))/r3;
 				//update position using current velocity and next time step's acceleration
 				a->pos.x += 0.5*a->acc.x*dt*dt + a->vel.x*dt;
 				a->pos.y += 0.5*a->acc.y*dt*dt + a->vel.y*dt;
@@ -379,6 +383,10 @@ void integrateNewton(obj *objects, int numObjects, double dt) {
 #pragma omp parallel for
 	for (i = 0; i < numObjects; i++) {
 		a = objects + i; //"a" is the object we're updating, so take it from "objects"
+		//rezero acceleration because acceleration is only for current time step 
+		a->acc.x = 0;
+		a->acc.y = 0;
+		a->acc.z = 0;
 		for (j = 0; j < numObjects; j++) { // 2 for loops → O(n²)
 			if (j != i) { //exclude self-interactions
 				b = objectsOld + j; //"b" is the "source" object, which we're not updating, so take it from "objectsOld"
@@ -387,9 +395,9 @@ void integrateNewton(obj *objects, int numObjects, double dt) {
 				//units: c = e = e' = 1
 				//update acceleration
 				//use Newton's force law here:
-				a->acc.x = (b->pos.x - a->pos.x)/r3;
-				a->acc.y = (b->pos.y - a->pos.y)/r3;
-				a->acc.z = (b->pos.z - a->pos.z)/r3;
+				a->acc.x += (b->pos.x - a->pos.x)/r3;
+				a->acc.y += (b->pos.y - a->pos.y)/r3;
+				a->acc.z += (b->pos.z - a->pos.z)/r3;
 				//update position using current velocity and next time step's acceleration
 				a->pos.x += 0.5*a->acc.x*dt*dt + a->vel.x*dt;
 				a->pos.y += 0.5*a->acc.y*dt*dt + a->vel.y*dt;

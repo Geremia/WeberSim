@@ -10,17 +10,14 @@ plot 'Newton.txt' skip 3 u 5:9 title 'Newton', 'Weber.txt' skip 3 u 5:9 title 'W
 set title "Distance vs. Acceleration"
 set xlabel "log(Distance r)"
 set ylabel "log(Acceleration a)"
-set key bottom left
 plot 'Newton.txt' skip 3 u 5:13 title 'Newton', 'Weber.txt' skip 3 u 5:13 title 'Weber'
 set title "Distance vs. Angular Momentum"
 set xlabel "log(Distance r)"
 set ylabel "log(Angular Momentum ℓ)"
-set key top left
 plot 'Newton.txt' skip 3 u 5:14 title 'Newton', 'Weber.txt' skip 3 u 5:14 title 'Weber'
 set title "Distance vs. Torque"
 set xlabel "log(Distance r)"
 set ylabel "log(Torque τ)"
-set key bottom left
 plot 'Newton.txt' skip 3 u 5:15 title 'Newton', 'Weber.txt' skip 3 u 5:15 title 'Weber'
 unset multiplot
 
