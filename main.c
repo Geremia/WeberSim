@@ -23,6 +23,11 @@ typedef struct {
     //mass assumed = 1
 } obj;
 
+//Compute the norm (magnitude) of a vector.
+inline double vecNorm(vec *v) {
+	return sqrt(v->x * v->x + v->y * v->y + v->z * v->z);
+}
+
 //Generate a vector in a random direction, of random length ≤ L
 inline vec randVec(double L)
 {
@@ -36,9 +41,19 @@ inline vec randVec(double L)
     return vec;
 }
 
-//Compute the norm (magnitude) of a vector.
-inline double vecNorm(vec *v) {
-	return sqrt(v->x * v->x + v->y * v->y + v->z * v->z);
+//Generate a vector of length r in a random direction
+inline vec randUnitVec(double r)
+{
+    double x, y, z, norm;
+    x = rand11();
+    y = rand11();
+    z = rand11();
+    vec vec = {x, y, z};
+    norm = vecNorm(&vec);
+    vec.x *= r/norm;
+    vec.y *= r/norm;
+    vec.z *= r/norm;
+    return vec;
 }
 
 //Generate a vector, of magnitude ∝ r from z-axis, in x-y plane tangent to point (x,y).
@@ -73,12 +88,27 @@ inline vec tangentVec(double x, double y, double magnitude, double radius)
 
 //Generate a random distribution of numObjects objects in sphere of radius rad.
 //They will have velMag worth of rotational velocity ∥ to z axis.
-obj* generate(int numObjects, double rad, double velMag)
+obj* generate_solid(int numObjects, double rad, double velMag)
 {
     obj *objects = calloc(numObjects, sizeof(obj));
 #pragma omp parallel for
     for (int i = 0; i < numObjects; i++) {
 	objects[i].pos = randVec(rad);
+	objects[i].vel = tangentVec(objects[i].pos.x,
+		       		    objects[i].pos.y,
+				    velMag, rad);
+    }
+    return objects;
+}
+
+//Generate a random distribution of numObjects objects in spherical shell of radius rad.
+//They will have velMag worth of rotational velocity ∥ to z axis.
+obj* generate_shell(int numObjects, double rad, double velMag)
+{
+    obj *objects = calloc(numObjects, sizeof(obj));
+#pragma omp parallel for
+    for (int i = 0; i < numObjects; i++) {
+	objects[i].pos = randUnitVec(rad);
 	objects[i].vel = tangentVec(objects[i].pos.x,
 		       		    objects[i].pos.y,
 				    velMag, rad);
@@ -430,13 +460,14 @@ int main(int argc, char *argv[]) {
 	double radius = 0, //radius of "Plummer" sphere
 	       velMag = 0; //magnitude of initial velocity for each object
 	double t_0 = 0, t_f = 0, dt = 0;
-	_Bool weber = 1; // ≠1 → Newton's force law 
+	_Bool weber = 1, // ≠1 → Newton's force law 
+	      shell = 1; // ≠1 → solid spherical distribution (not shell)
 	omp_set_num_threads(omp_get_num_procs()); //# threads == # CPUs
     	srandom(999); //Seed the RNG with time
 	for (int i = 1; i < argc; i++) {
 		if (strcmp(&argv[i][1], "h")==0)
 			goto usage;
-		if (!(argc >= 13 && argc <= 16)) {
+		if (!(argc >= 13 && argc <= 17)) {
 			fprintf(stderr, "Wrong number of arguments\n");
 			goto usage;
 		}
@@ -495,6 +526,13 @@ int main(int argc, char *argv[]) {
 					return 1;
 				}
 				break;
+			case 's':
+				shell = atoi(argv[++i]);
+				if (!(shell == 0 || shell == 1)) {
+					fprintf(stderr, "(s = %d) ≠ (0 or 1)\n", shell);
+					return 1;
+				}
+				break;
 			case 'h':
 usage:
 				printf("Usage:\n"
@@ -508,6 +546,7 @@ usage:
 				       "\t-d: time step\n"
 				       "Units are defined in terms of c = 1 and e = e' = 1.\n"
 				       "Optional:\n\t-w: 0 = Newton's force (default: 1 = Weber's)\n"
+				       "\t-s: 0 = solid spherical distribution, 1 = shell distribution (default: 1)\n"
 				       "\t-h: this help message\n");
 				return 0;
 			}
@@ -516,8 +555,9 @@ usage:
 	printf("Generating random distribution of"
 	       "\n\t%e objects each with"
 	       "\n\tvelocity %e ∝ (dist. from z-axis)"
-	       "\n\tin sphere of radius %e…\n",
-	       (double)n, velMag, radius);
+	       "\n\t%s of radius %e…\n",
+	       (double)n, velMag, (shell==0)?"in sphere":"on spherical shell", radius);
+	obj* (*generate)(int, double, double) = (shell==1)?generate_shell:generate_solid;
 	obj *objects = generate(n, radius, velMag);
 	void (*integrationFunction)(obj*, int, double) = (weber==1)?integrateWeber:integrateNewton;
 	printf("Integrating %s's force law using %d OpenMP procs…"
