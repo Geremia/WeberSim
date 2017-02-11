@@ -21,6 +21,7 @@ typedef struct {
 typedef struct {
     vec pos, vel, acc;
     //mass assumed = 1
+    double T, U; //kinetic and potential energies
 } obj;
 
 //Compute the norm (magnitude) of a vector.
@@ -121,164 +122,46 @@ inline double vecNormSqrd(vec *v) {
 	return v->x * v->x + v->y * v->y + v->z * v->z;
 }
 
-inline void vecPlusEqual(vec *result, vec *addend) {
-	result->x += addend->x;
-	result->y += addend->y;
-	result->z += addend->z;
-}
-
-inline void vecDivEqual(vec *result, double divend) {
-	result->x /= divend;
-	result->y /= divend;
-	result->z /= divend;
-}
-
-inline void crossProdPlusEqual(vec *result, vec *a, vec *b) {
-	result->x += a->y * b->z - a->z * b->y;
-	result->y += a->z * b->x - a->x * b->z;
-	result->z += a->x * b->z - a->z * b->x;
-}
-
-inline vec crossProd(vec *a, vec *b) {
-	vec result;
-	result.x = a->y * b->z - a->z * b->y;
-	result.y = a->z * b->x - a->x * b->z;
-	result.z = a->x * b->z - a->z * b->x;
-	return result;
-}
-
 void printPhysicsStats(obj *objects, int numObjects, FILE *outFile, double t /*= current time step*/) {
 	int i;
-	vec CoMpos = {0}, CoMvel = {0}, CoMacc = {0}, //center of mass pos., vel., & acc. vectors
-	    angularMo = {0}, torque = {0}; //angular momentum (r×v) and torque (r×a)
-	double avgD = 0, avgDstd = 0, rmsD = 0, rmsDstd = 0, //distance-from-origin stats
-	       totalVel = 0, totalAcc = 0,
-	       avgVel = 0, avgVelStd = 0, rmsVel = 0, rmsVelStd = 0,
-	       avgAcc = 0, avgAccStd = 0, rmsAcc = 0, rmsAccStd = 0;
+	double T = 0, U = 0; //total kinetic and potential energies
 #pragma omp parallel
-	{ //compute CoMs
-		for (i = 0; i < numObjects; i++) {
-			//position
-			vecPlusEqual(&CoMpos, &objects[i].pos);
-			//velocity
-			vecPlusEqual(&CoMvel, &objects[i].vel);
-			//acceleration
-			vecPlusEqual(&CoMacc, &objects[i].acc);
-		}
-		vecDivEqual(&CoMpos, numObjects);
-		vecDivEqual(&CoMvel, numObjects);
-		vecDivEqual(&CoMacc, numObjects);
+{
+	for (i = 0; i < numObjects; i++) { //add up all T`s and U`s
+		T += objects[i].T;
+		U += objects[i].U;
 	}
-#pragma omp parallel
-	{ //compute total pos (distance-from-origin), vel, & acc:
-		for (i = 0; i < numObjects; i++) {
-			avgD += vecNorm(&objects[i].pos);
-			totalVel += vecNorm(&objects[i].vel);
-			totalAcc += vecNorm(&objects[i].acc);
-		}
-		//compute average vel & acc:
-		avgD /= (double)numObjects;
-		avgVel = totalVel / (double)numObjects;
-		avgAcc = totalAcc / (double)numObjects;
-	}
-#pragma omp parallel
-	{ //compute RMSs:
-		for (i = 0; i < numObjects; i++) {
-			rmsD += vecNormSqrd(&objects[i].pos);
-			rmsVel += vecNormSqrd(&objects[i].vel);
-			rmsAcc += vecNormSqrd(&objects[i].acc);
-		}
-		rmsD = sqrt(rmsD/(double)numObjects);
-		rmsVel = sqrt(rmsVel/(double)numObjects);
-		rmsAcc = sqrt(rmsAcc/(double)numObjects);
-		//compute standard dev.s:
-		for (i = 0; i < numObjects; i++) {
-			//for means
-			avgDstd += pow(vecNormSqrd(&objects[i].pos) - rmsD, 2.0);
-			avgVelStd += pow(vecNormSqrd(&objects[i].vel) - rmsVel, 2.0);
-			avgAccStd += pow(vecNormSqrd(&objects[i].acc) - rmsAcc, 2.0);
-			//for RMSs
-			rmsDstd += pow(vecNormSqrd(&objects[i].pos) - rmsD, 2.0);
-			rmsVelStd += pow(vecNormSqrd(&objects[i].vel) - rmsVel, 2.0);
-			rmsAccStd += pow(vecNormSqrd(&objects[i].acc) - rmsAcc, 2.0);
-		}
-		avgDstd = sqrt(rmsDstd/(double)numObjects);
-		avgVelStd = sqrt(rmsVelStd/(double)numObjects);
-		avgAccStd = sqrt(rmsAccStd/(double)numObjects);
-		rmsDstd = sqrt(rmsDstd/(double)numObjects);
-		rmsVelStd = sqrt(rmsVelStd/(double)numObjects);
-		rmsAccStd = sqrt(rmsAccStd/(double)numObjects);
-	}
-#pragma omp parallel
-	{ //compute angular mo. and torque
-		for (i = 0; i < numObjects; i++) {
-			crossProdPlusEqual(&angularMo, &objects[i].pos, &objects[i].vel); // angular mo. = r × v
-			crossProdPlusEqual(&torque, &objects[i].pos, &objects[i].acc); // torque = r × a
-			vecDivEqual(&angularMo, numObjects);
-			vecDivEqual(&torque, numObjects);
-		}
-	}
-	fprintf(outFile, "% e "
-			 "% e % e % e "
-			 "% e % e % e "
-			 "% e % e % e "
-			 "% e % e % e "
-			 "% e % e % e "
-			 "% e % e % e % e "
-			 "% e % e % e % e % e "
-			 "% e % e % e % e % e\n",
-			 t,
-			 CoMpos.x, CoMpos.y, CoMpos.z,
-			 CoMvel.x, CoMvel.y, CoMvel.z,
-			 CoMacc.x, CoMacc.y, CoMacc.z,
-			 angularMo.x, angularMo.y, angularMo.z,
-			 torque.x, torque.y, torque.z,
-			 avgD, avgDstd, rmsD, rmsDstd,
-			 totalVel, avgVel, avgVelStd, rmsVel, rmsVelStd,
-			 totalAcc, avgAcc, avgAccStd, rmsAcc, rmsAccStd);
+}
+	fprintf(outFile, "% e % e % e\n",
+			 t, T, U);
 }
 
 void printOut(obj *objects, int numObjects, FILE *outFile, double t) {
-	vec pos, vel, acc, angmo, torque;
+	vec pos, vel;
+	double U;
 	//print timestep
 	fprintf(outFile, "# t = %f\n", t);
 	//print physics stats (total KE, RMS vel./acc., etc.) for time-snapshot
 	//print header
 	fprintf(outFile, "%6s "
-			 "%13s %13s %13s %13s "
-			 "%13s %13s %13s %13s "
-			 "%13s %13s %13s %13s "
-			 "%13s %13s\n"
+			 "%13s %13s %13s %13s %13s %13s\n"
 			 "#%5d "
-			 "%13d %13d %13d %13d "
-			 "%13d %13d %13d %13d "
-			 "%13d %13d %13d %13d "
-			 "%13d %13d\n",
+			 "%13d %13d %13d %13d %13d %13d\n",
 			 "#   ID",
-			 "x", "y", "z", "dist",
-			 "vel_x", "vel_y", "vel_z", "|vel|",
-			 "acc_x", "acc_y", "acc_z", "|acc|",
-			 "ang_mo", "torque",
-			 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15);
+			 "x", "y", "z", "dist", "T", "U",
+			 1,2,3,4,5,6,7);
 	//print object data
 	for (int i = 0; i < numObjects; i++) {
 		pos = objects[i].pos;
 		vel = objects[i].vel;
-		acc = objects[i].acc;
-		angmo = crossProd(&pos, &vel), // =r×v
-		torque = crossProd(&pos, &acc); // =r×a
+		U = objects[i].U;
 		fprintf(outFile,
 				"%6d "
-			 	"% e % e % e % e "
-			 	"% e % e % e % e "
 			 	"% e % e % e % e "
 			 	"% e % e\n",
 				i, //id of object
 				pos.x, pos.y, pos.z, vecNorm(&pos),
-				vel.x, vel.y, vel.z, vecNorm(&vel),
-				acc.x, acc.y, acc.z, vecNorm(&acc),
-				vecNorm(&angmo), // =|r×v|
-				vecNorm(&torque)); // =|r×a|
+				0.5*vecNormSqrd(&vel), U);
 	}
 }
 
@@ -300,43 +183,11 @@ void writeDataFile(obj *objects, int numObjects, int stepNumber, double t) {
 		if ((s = fopen(str, "a"))) //a = append
 			//header:
 			fprintf(s, //column headers:
-				   "%13s "
-				   "%13s %13s %13s "
-				   "%13s %13s %13s "
-				   "%13s %13s %13s "
-				   "%13s %13s %13s "
-				   "%13s %13s %13s "
-				   "%13s %13s %13s %13s "
-				   "%13s %13s %13s %13s %13s "
-				   "%13s %13s %13s %13s %13s\n"
+				   "%13s %13s %13s\n"
 				   //column numbers:
-				   "#%12d "
-				   "%13d %13d %13d "
-				   "%13d %13d %13d "
-				   "%13d %13d %13d "
-				   "%13d %13d %13d "
-				   "%13d %13d %13d "
-				   "%13d %13d %13d %13d "
-				   "%13d %13d %13d %13d %13d "
-				   "%13d %13d %13d %13d %13d\n",
-				   "#           t",
-				   "CoM x", "CoM y", "CoM z",
-				   "CoM vel x", "CoM vel y", "CoM vel z",
-				   "CoM acc x", "CoM acc y", "CoM acc z",
-				   "ang. mo. x", "ang. mo. y", "ang. mo. z",
-				   "torque x", "torque y", "torque z",
-				   "mean dist", "+/-",  "RMS dist", "+/-",
-				   "total vel", "mean vel", "+/-", "RMS vel", "+/-",
-				   "total acc", "mean  acc", "+/-", "RMS acc", "+/-",
-				   1,
-				   2,3,4,
-				   5,6,7,
-				   8,9,10,
-				   11,12,13,
-				   14,15,16,
-				   17,18,19,20,
-				   21,22,23,24,25,
-				   26,27,28,29,30);
+				   "#%12d %13d %13d\n",
+				   "#           t", "total T", "total U",
+				   1, 2, 3);
 		else
 			goto error;
 	}
@@ -358,7 +209,7 @@ inline double distance(vec *a, vec *b) {
 
 void integrateWeber(obj *objects, int numObjects, double dt) {
 	int i, j;
-	double r = 0, r3 = 0, dr_dt = 0, dr_dt_sqrd, d2r_dt2 = 0;
+	double r = 0, r3 = 0, dr_dt = 0, dr_dt_sqrd = 0, d2r_dt2 = 0;
 	obj *a, *b;
 	obj *objectsOld = malloc(sizeof(obj)*numObjects);
 	objectsOld = memcpy(objectsOld, objects, sizeof(obj)*numObjects); //backup old one
@@ -366,10 +217,11 @@ void integrateWeber(obj *objects, int numObjects, double dt) {
 #pragma omp parallel for
 	for (i = 0; i < numObjects; i++) {
 		a = objects + i; //"a" is the object we're updating, so take it from "objects"
-		//rezero acceleration because acceleration is only for current time step 
+		//rezero acceleration and energies because they're only for current time step 
 		a->acc.x = 0;
 		a->acc.y = 0;
 		a->acc.z = 0;
+		a->U = a->T = 0;
 		for (j = 0; j < numObjects; j++) { // 2 for loops → O(n²)
 			if (j != i) { //exclude self-interactions
 				b = objectsOld + j; //"b" is the "source" object, which we're not updating, so take it from "objectsOld"
@@ -380,25 +232,29 @@ void integrateWeber(obj *objects, int numObjects, double dt) {
 					 (a->pos.y - b->pos.y)*(a->vel.y - b->vel.y)+
 					 (a->pos.z - b->pos.z)*(a->vel.z - b->vel.z))/r;
 					dr_dt_sqrd = dr_dt * dr_dt;
-				d2r_dt2 = ((a->vel.x - b->vel.x)*(a->vel.x - b->vel.x) + (a->pos.x - b->pos.x)*(a->acc.x - b->acc.x) +
-					   (a->vel.y - b->vel.y)*(a->vel.y - b->vel.y) + (a->pos.y - b->pos.y)*(a->acc.y - b->acc.y) +
-					   (a->vel.z - b->vel.z)*(a->vel.z - b->vel.z) + (a->pos.z - b->pos.z)*(a->acc.z - b->acc.z)
+				d2r_dt2 = ((a->vel.x - b->vel.x)*(a->vel.x - b->vel.x) + (b->pos.x - a->pos.x)*(b->acc.x - a->acc.x) +
+					   (a->vel.y - b->vel.y)*(a->vel.y - b->vel.y) + (b->pos.y - a->pos.y)*(b->acc.y - a->acc.y) +
+					   (a->vel.z - b->vel.z)*(a->vel.z - b->vel.z) + (b->pos.z - a->pos.z)*(b->acc.z - a->acc.z)
 					   - dr_dt_sqrd)/r;
 				//update acceleration
 				//use Weber's force law here:                   V---- Negative sign here should make the force attractive
 				a->acc.x += ((1 - 0.5*dr_dt_sqrd + r*d2r_dt2) * (b->pos.x - a->pos.x))/r3;
 				a->acc.y += ((1 - 0.5*dr_dt_sqrd + r*d2r_dt2) * (b->pos.y - a->pos.y))/r3;
 				a->acc.z += ((1 - 0.5*dr_dt_sqrd + r*d2r_dt2) * (b->pos.z - a->pos.z))/r3;
-				//update position using current velocity and next time step's acceleration
-				a->pos.x += 0.5*a->acc.x*dt*dt + a->vel.x*dt;
-				a->pos.y += 0.5*a->acc.y*dt*dt + a->vel.y*dt;
-				a->pos.z += 0.5*a->acc.z*dt*dt + a->vel.z*dt;
-				//update velocity using next time step's acceleration
-				a->vel.x += a->acc.x * dt;
-				a->vel.y += a->acc.y * dt;
-				a->vel.z += a->acc.z * dt;
+				//update potential energy
+				a->U += (1+dr_dt_sqrd)/r;
 			}
 		}
+		//update position using current velocity and next time step's acceleration
+		a->pos.x += 0.5*a->acc.x*dt*dt + a->vel.x*dt;
+		a->pos.y += 0.5*a->acc.y*dt*dt + a->vel.y*dt;
+		a->pos.z += 0.5*a->acc.z*dt*dt + a->vel.z*dt;
+		//update velocity using next time step's acceleration
+		a->vel.x += a->acc.x * dt;
+		a->vel.y += a->acc.y * dt;
+		a->vel.z += a->acc.z * dt;
+		//update kinetic energy
+		a->T = 0.5*vecNormSqrd(&a->vel);
 	}
 	free(objectsOld);
 }
@@ -413,31 +269,36 @@ void integrateNewton(obj *objects, int numObjects, double dt) {
 #pragma omp parallel for
 	for (i = 0; i < numObjects; i++) {
 		a = objects + i; //"a" is the object we're updating, so take it from "objects"
-		//rezero acceleration because acceleration is only for current time step 
+		//rezero acceleration and energies because they're only for current time step 
 		a->acc.x = 0;
 		a->acc.y = 0;
 		a->acc.z = 0;
+		a->U = a->T = 0;
 		for (j = 0; j < numObjects; j++) { // 2 for loops → O(n²)
 			if (j != i) { //exclude self-interactions
 				b = objectsOld + j; //"b" is the "source" object, which we're not updating, so take it from "objectsOld"
 				r = distance(&a->pos, &b->pos);
 					r3 = r*r*r;
 				//units: c = e = e' = 1
-				//update acceleration
+				//accumulate acceleration
 				//use Newton's force law here:
 				a->acc.x += (b->pos.x - a->pos.x)/r3;
 				a->acc.y += (b->pos.y - a->pos.y)/r3;
 				a->acc.z += (b->pos.z - a->pos.z)/r3;
-				//update position using current velocity and next time step's acceleration
-				a->pos.x += 0.5*a->acc.x*dt*dt + a->vel.x*dt;
-				a->pos.y += 0.5*a->acc.y*dt*dt + a->vel.y*dt;
-				a->pos.z += 0.5*a->acc.z*dt*dt + a->vel.z*dt;
-				//update velocity using next time step's acceleration
-				a->vel.x += a->acc.x * dt;
-				a->vel.y += a->acc.y * dt;
-				a->vel.z += a->acc.z * dt;
+				//update potential energy
+				a->U += 1.0/r;
 			}
 		}
+		//update position using current velocity and next time step's acceleration
+		a->pos.x += 0.5*a->acc.x*dt*dt + a->vel.x*dt;
+		a->pos.y += 0.5*a->acc.y*dt*dt + a->vel.y*dt;
+		a->pos.z += 0.5*a->acc.z*dt*dt + a->vel.z*dt;
+		//update velocity using next time step's acceleration
+		a->vel.x += a->acc.x * dt;
+		a->vel.y += a->acc.y * dt;
+		a->vel.z += a->acc.z * dt;
+		//update kinetic energy
+		a->T = 0.5*vecNormSqrd(&a->vel);
 	}
 	free(objectsOld);
 }
