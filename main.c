@@ -8,6 +8,8 @@
 #include <string.h>		//for memset
 #include <time.h>		//for seeding the RNG with the current time
 
+#include <omp.h>		//for multithreading
+
 //random number in range [-1, 1] and (0, 1], respectively
 #define rand11() (2.0*((double)random())/((double)(RAND_MAX))-1.0)
 #define rand01() (((double)random())/((double)(RAND_MAX)))
@@ -90,6 +92,7 @@ inline vec tangentVec(double x, double y, double magnitude, double radius)
 obj* generate_solid(int numObjects, double rad, double velMag)
 {
     obj *objects = calloc(numObjects, sizeof(obj));
+#pragma omp parallel for
     for (int i = 0; i < numObjects; i++) {
 	objects[i].pos = randVec(rad);
 	objects[i].vel = tangentVec(objects[i].pos.x,
@@ -104,6 +107,7 @@ obj* generate_solid(int numObjects, double rad, double velMag)
 obj* generate_shell(int numObjects, double rad, double velMag)
 {
     obj *objects = calloc(numObjects, sizeof(obj));
+#pragma omp parallel for
     for (int i = 0; i < numObjects; i++) {
 	objects[i].pos = randUnitVec(rad);
 	objects[i].vel = tangentVec(objects[i].pos.x,
@@ -160,7 +164,7 @@ void printOut(obj *objects, int numObjects, FILE *outFile, double t) {
 
 void writeDataFile(obj *objects, int numObjects, int stepNumber, double t) {
 	FILE *f, *s; //frame (f) and stats (s) files
-	char str[10];
+	char str[16];
 	//Output "frame" file
 	sprintf(str, "%06d.txt", stepNumber);
 	if ((f = fopen(str, "w")))
@@ -207,6 +211,7 @@ void integrateWeber(obj *objects, int numObjects, double dt) {
 	obj *objectsOld = malloc(sizeof(obj)*numObjects);
 	objectsOld = memcpy(objectsOld, objects, sizeof(obj)*numObjects); //backup old one
 	//compute force on object i due to all objects ≠ i
+#pragma omp parallel for
 	for (i = 0; i < numObjects; i++) {
 		a = objects + i; //"a" is the object we're updating, so take it from "objects"
 		//rezero acceleration and energies because they're only for current time step 
@@ -258,6 +263,7 @@ void integrateNewton(obj *objects, int numObjects, double dt) {
 	obj *objectsOld = malloc(sizeof(obj)*numObjects);
 	objectsOld = memcpy(objectsOld, objects, sizeof(obj)*numObjects); //backup old one
 	//compute force on object i due to all objects ≠ i
+#pragma omp parallel for
 	for (i = 0; i < numObjects; i++) {
 		a = objects + i; //"a" is the object we're updating, so take it from "objects"
 		//rezero acceleration and energies because they're only for current time step 
@@ -314,6 +320,7 @@ int main(int argc, char *argv[]) {
 	double t_0 = 0, t_f = 0, dt = 0;
 	_Bool weber = 1, // ≠1 → Newton's force law 
 	      shell = 1; // ≠1 → solid spherical distribution (not shell)
+	omp_set_num_threads(omp_get_num_procs()); //# threads == # CPUs
     	srandom(999); //Seed the RNG with time
 	for (int i = 1; i < argc; i++) {
 		if (strcmp(&argv[i][1], "h")==0)
@@ -411,9 +418,9 @@ usage:
 	obj* (*generate)(int, double, double) = (shell==1)?generate_shell:generate_solid;
 	obj *objects = generate(n, radius, velMag);
 	void (*integrationFunction)(obj*, int, double) = (weber==1)?integrateWeber:integrateNewton;
-	printf("Integrating %s's force law…"
+	printf("Integrating %s's force law using %d OpenMP procs…"
 	       "\n\tt = %e → %e\n\tΔt = %e\n",
-	       (weber==1)?"Weber":"Newton",
+	       (weber==1)?"Weber":"Newton", omp_get_num_procs(),
 	       t_0, t_f, dt);
 	simulate(t_0, t_f, dt, objects, n, integrationFunction);
 	printf("%e files written.\n", (double)((int)((t_f - t_0)/dt)));
