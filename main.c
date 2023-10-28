@@ -160,9 +160,9 @@ void printOut(obj *objects, int numObjects, FILE *outFile, double t) {
 
 void writeDataFile(obj *objects, int numObjects, int stepNumber, double t) {
 	FILE *f, *s; //frame (f) and stats (s) files
-	char str[10];
+	char str[11];
 	//Output "frame" file
-	sprintf(str, "%06d.txt", stepNumber);
+	sprintf(str, "%06d.txt", (int)stepNumber);
 	if ((f = fopen(str, "w")))
 		printOut(objects, numObjects, f, t);
 	else
